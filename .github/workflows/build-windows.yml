@@ -1,0 +1,38 @@
+name: Build Windows EXE
+
+on:
+  release:
+    types: [created]   # triggers when you publish a new release on GitHub
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install PyQt6 pyinstaller
+
+      - name: Download FFmpeg for Windows
+        run: python vendor_ffmpeg.py
+
+      - name: Build with PyInstaller
+        run: pyinstaller --clean --noconfirm flowcap.spec
+
+      - name: Zip the output
+        run: |
+          cd dist
+          Compress-Archive -Path FlowCap -DestinationPath FlowCap-Windows.zip
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FlowCap-Windows.zip
