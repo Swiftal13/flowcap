@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FlowCap")
-        self.setFixedSize(720, 656)
+        self.setFixedSize(720, 700)
 
         self._input_path: str | None = None
         self._worker: ConvertWorker | None = None
@@ -151,21 +151,30 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(28, 22, 28, 16)
+        layout.setContentsMargins(32, 28, 32, 20)
         layout.setSpacing(0)
 
         # ── Header ───────────────────────────────────────────────────────
         header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+
         title = QLabel("FlowCap")
         title.setObjectName("titleLabel")
+        credit = QLabel('<a href="https://www.youtube.com/channel/UCRVR-SzXYsYZN-6KjAGAn3g" style="color:#333; text-decoration:underline; text-decoration-color:#2a2a2a; font-size:11px;">by Swiftal</a>')
+        credit.setOpenExternalLinks(True)
+        credit.setObjectName("creditLabel")
+        credit.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
         subtitle = QLabel("High-framerate → 60fps  ·  Optical flow")
         subtitle.setObjectName("subtitleLabel")
+
         header_row.addWidget(title)
+        header_row.addWidget(credit)
         header_row.addStretch()
         header_row.addWidget(subtitle)
         header_row.setAlignment(subtitle, Qt.AlignmentFlag.AlignBottom)
         layout.addLayout(header_row)
-        layout.addSpacing(18)
+        layout.addSpacing(24)
 
         # ── FFmpeg warning (hidden by default) ───────────────────────────
         self._ffmpeg_warn = QLabel()
@@ -178,7 +187,7 @@ class MainWindow(QMainWindow):
         self._drop_zone = DropZone()
         self._drop_zone.file_dropped.connect(self._on_file_selected)
         layout.addWidget(self._drop_zone)
-        layout.addSpacing(8)
+        layout.addSpacing(10)
 
         browse_row = QHBoxLayout()
         browse_btn = QPushButton("Browse file…")
@@ -187,7 +196,7 @@ class MainWindow(QMainWindow):
         browse_row.addWidget(browse_btn)
         browse_row.addStretch()
         layout.addLayout(browse_row)
-        layout.addSpacing(16)
+        layout.addSpacing(22)
 
         # ── Preview + info ───────────────────────────────────────────────
         preview_row = QHBoxLayout()
@@ -215,11 +224,11 @@ class MainWindow(QMainWindow):
         )
         preview_row.addWidget(self._info_label)
         layout.addLayout(preview_row)
-        layout.addSpacing(20)
+        layout.addSpacing(26)
 
         # ── Settings + convert row ───────────────────────────────────────
         action_row = QHBoxLayout()
-        action_row.setSpacing(10)
+        action_row.setSpacing(12)
 
         quality_label = QLabel("Quality")
         quality_label.setStyleSheet("color: #444; font-size: 11px;")
@@ -237,7 +246,7 @@ class MainWindow(QMainWindow):
         self._convert_btn.clicked.connect(self._start_conversion)
         action_row.addWidget(self._convert_btn)
         layout.addLayout(action_row)
-        layout.addSpacing(12)
+        layout.addSpacing(16)
 
         # ── Progress bar + status ────────────────────────────────────────
         self._progress_bar = QProgressBar()
@@ -263,6 +272,7 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.clicked.connect(self._open_output_folder)
         status_row.addWidget(self._open_folder_btn)
         layout.addLayout(status_row)
+        layout.addSpacing(6)
 
         # ── Log ──────────────────────────────────────────────────────────
         log_group = QGroupBox("Log")
@@ -275,14 +285,6 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self._log)
         layout.addWidget(log_group)
 
-        # ── Footer ───────────────────────────────────────────────────────
-        footer_row = QHBoxLayout()
-        footer_row.addStretch()
-        credit = QLabel('<a href="https://www.youtube.com/channel/UCRVR-SzXYsYZN-6KjAGAn3g" style="color:#2a2a2a; text-decoration:none; font-size:10px;">Made by Swiftal</a>')
-        credit.setOpenExternalLinks(True)
-        credit.setObjectName("creditLabel")
-        footer_row.addWidget(credit)
-        layout.addLayout(footer_row)
 
     # ── FFmpeg check ─────────────────────────────────────────────────────
 

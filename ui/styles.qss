@@ -249,12 +249,13 @@ QScrollBar::handle:horizontal {
 
 /* ── Credit ─────────────────────────────────────────────────────────── */
 QLabel#creditLabel {
-    color: #2a2a2a;
-    font-size: 10px;
+    color: #333;
+    font-size: 11px;
+    padding-top: 6px;
 }
 
 QLabel#creditLabel:hover {
-    color: #555;
+    color: #666;
 }
 
 /* ── Tooltip ────────────────────────────────────────────────────────── */
