@@ -4,6 +4,9 @@ on:
   release:
     types: [created]   # triggers when you publish a new release on GitHub
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
