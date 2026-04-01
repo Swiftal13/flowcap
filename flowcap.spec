@@ -7,10 +7,19 @@ from pathlib import Path
 
 block_cipher = None
 
+# Collect FFmpeg binaries from vendor/
+_vendor = Path('vendor')
+_suffix = '.exe' if sys.platform == 'win32' else ''
+_binaries = []
+for _name in ('ffmpeg', 'ffprobe'):
+    _p = _vendor / f'{_name}{_suffix}'
+    if _p.exists():
+        _binaries.append((str(_p), 'vendor'))
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=_binaries,
     datas=[
         ('ui/styles.qss', 'ui'),
     ],

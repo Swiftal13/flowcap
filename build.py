@@ -19,6 +19,10 @@ def main():
         print("PyInstaller not found. Installing...")
         subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
 
+    # Download FFmpeg binaries into vendor/ if needed
+    print("Fetching FFmpeg binaries...")
+    subprocess.run([sys.executable, "vendor_ffmpeg.py"], check=True)
+
     print("Building FlowCap...")
     subprocess.run(
         ["pyinstaller", "--clean", "--noconfirm", "flowcap.spec"],

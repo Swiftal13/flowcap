@@ -18,6 +18,9 @@ build/
 venv/
 env/
 
+# FFmpeg vendor binaries (downloaded at build time)
+vendor/
+
 # Temp / OS
 .DS_Store
 Thumbs.db

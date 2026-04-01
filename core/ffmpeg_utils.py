@@ -11,7 +11,25 @@ import math
 
 
 def find_ffmpeg() -> tuple[str | None, str | None]:
-    """Return (ffmpeg_path, ffprobe_path) or (None, None) if not found."""
+    """
+    Return (ffmpeg_path, ffprobe_path).
+    Checks the PyInstaller bundle (sys._MEIPASS/vendor/) first,
+    then falls back to PATH so dev mode still works.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    # Inside a PyInstaller bundle, binaries are extracted to _MEIPASS
+    meipass = getattr(_sys, "_MEIPASS", None)
+    if meipass:
+        vendor = _Path(meipass) / "vendor"
+        suffix = ".exe" if _sys.platform == "win32" else ""
+        ff = vendor / f"ffmpeg{suffix}"
+        fp = vendor / f"ffprobe{suffix}"
+        if ff.exists() and fp.exists():
+            return str(ff), str(fp)
+
+    # Dev / system install fallback
     return shutil.which("ffmpeg"), shutil.which("ffprobe")
 
 
