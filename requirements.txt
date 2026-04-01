@@ -1,0 +1,2 @@
+PyQt6>=6.4.0
+# opencv-python and numpy are no longer required — interpolation is handled by FFmpeg

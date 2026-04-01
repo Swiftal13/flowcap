@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# PyInstaller
+*.spec.bak
+dist/
+build/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Temp / OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# FlowCap temp output
+flowcap_*/
+*_flowcap.mp4
