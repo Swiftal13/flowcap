@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FlowCap")
-        self.setFixedSize(720, 640)
+        self.setFixedSize(720, 656)
 
         self._input_path: str | None = None
         self._worker: ConvertWorker | None = None
@@ -135,7 +135,12 @@ class MainWindow(QMainWindow):
     # ── Stylesheet ───────────────────────────────────────────────────────
 
     def _load_stylesheet(self):
-        qss_path = Path(__file__).parent / "styles.qss"
+        # sys._MEIPASS is set by PyInstaller at runtime; fall back to __file__ in dev
+        import sys as _sys
+        base = Path(getattr(_sys, "_MEIPASS", Path(__file__).parent.parent))
+        qss_path = base / "ui" / "styles.qss"
+        if not qss_path.exists():
+            qss_path = Path(__file__).parent / "styles.qss"
         if qss_path.exists():
             with open(qss_path) as f:
                 self.setStyleSheet(f.read())
@@ -269,6 +274,15 @@ class MainWindow(QMainWindow):
         self._log.setFixedHeight(140)
         log_layout.addWidget(self._log)
         layout.addWidget(log_group)
+
+        # ── Footer ───────────────────────────────────────────────────────
+        footer_row = QHBoxLayout()
+        footer_row.addStretch()
+        credit = QLabel('<a href="https://www.youtube.com/channel/UCRVR-SzXYsYZN-6KjAGAn3g" style="color:#2a2a2a; text-decoration:none; font-size:10px;">Made by Swiftal</a>')
+        credit.setOpenExternalLinks(True)
+        credit.setObjectName("creditLabel")
+        footer_row.addWidget(credit)
+        layout.addLayout(footer_row)
 
     # ── FFmpeg check ─────────────────────────────────────────────────────
 
