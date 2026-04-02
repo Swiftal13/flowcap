@@ -76,6 +76,7 @@ class DropZone(QWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("dropZone")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(120)
