@@ -37,10 +37,10 @@ QGroupBox::title {
 
 /* ── Drop zone ─────────────────────────────────────────────────────── */
 #dropZone {
-    background-color: #141414;
-    border: 1.5px dashed #2c2c2c;
+    background-color: #1a1a1a;
+    border: 1.5px dashed #404040;
     border-radius: 8px;
-    color: #444;
+    color: #888;
     font-size: 13px;
     min-height: 110px;
 }
