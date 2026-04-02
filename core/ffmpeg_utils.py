@@ -287,7 +287,8 @@ def extract_frames(
     cancel_check=None,
 ) -> int:
     """
-    Extract every frame from input_path as PNG images into output_dir.
+    Extract every frame from input_path as 0-indexed PNG images into output_dir.
+    Uses -start_number 0 so output matches RIFE's own naming convention.
     Returns the number of frames extracted.
     """
     ffmpeg, _ = find_ffmpeg()
@@ -298,7 +299,8 @@ def extract_frames(
     cmd = [
         ffmpeg, "-y",
         "-i", input_path,
-        "-vsync", "0",
+        "-vsync", "cfr",      # constant frame rate — no duplicate/dropped frames
+        "-start_number", "0",
         pattern,
     ]
 
@@ -358,37 +360,28 @@ def encode_frames(
     cancel_check=None,
 ) -> None:
     """
-    Encode a directory of PNG frames to video.
-    frame_rate: effective fps of the image sequence (2× input fps after RIFE)
+    Encode a directory of 0-indexed PNG frames to video.
+    frame_rate: fps of the image sequence after RIFE passes
     output_fps: desired output fps (e.g. 60)
+    Uses -framerate + pattern input — simpler and more reliable than concat.
     """
-    from pathlib import Path as _Path
-
     ffmpeg, _ = find_ffmpeg()
     if not ffmpeg:
         raise RuntimeError("ffmpeg not found.")
 
-    frames = sorted(
-        _Path(frames_dir).glob("*.png"),
-        key=lambda f: int(f.stem) if f.stem.isdigit() else int(f.stem.lstrip("0") or "0")
-    )
-    if not frames:
+    pngs = sorted(Path(frames_dir).glob("*.png"), key=lambda f: int(f.stem))
+    if not pngs:
         raise RuntimeError(f"No PNG frames found in {frames_dir}")
 
-    # Build concat list with explicit frame durations for accurate fps conversion
-    concat_file = _Path(frames_dir) / "_concat.txt"
-    duration = 1.0 / frame_rate
-    with open(concat_file, "w") as f:
-        for frame in frames:
-            f.write(f"file '{frame.as_posix()}'\n")
-            f.write(f"duration {duration:.10f}\n")
-        # Concat demuxer requires a trailing entry without duration
-        f.write(f"file '{frames[-1].as_posix()}'\n")
+    # Determine start number (RIFE outputs 0-indexed, extract also 0-indexed)
+    start_number = int(pngs[0].stem)
+    pattern = os.path.join(frames_dir, "%08d.png")
 
     cmd = [
         ffmpeg, "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", str(concat_file),
+        "-framerate", str(frame_rate),
+        "-start_number", str(start_number),
+        "-i", pattern,
         "-vf", f"fps={int(output_fps)}",
         "-c:v", "libx264",
         "-crf", "18",
@@ -436,7 +429,3 @@ def encode_frames(
     proc.wait()
     if proc.returncode not in (0, None):
         raise RuntimeError(f"FFmpeg encoding failed (exit {proc.returncode})")
-
-
-# Keep Path import available for extract_frames return
-from pathlib import Path

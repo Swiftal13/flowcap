@@ -172,7 +172,9 @@ def process_video(
                 log(f"  Pass {pass_num + 1} done.")
 
             frames_final_dir = current_in
-            final_frame_rate = current_fps
+            # Compute exact frame rate from actual frame count and video duration
+            actual_frames = len(list(Path(frames_final_dir).glob("*.png")))
+            final_frame_rate = actual_frames / duration if duration > 0 else current_fps
 
         # ── 5. Encode frames ──────────────────────────────────────────────
         encode_target = video_no_audio if has_audio else output_path
