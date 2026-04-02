@@ -34,9 +34,10 @@ class ConvertWorker(QObject):
     finished = pyqtSignal(str)          # output path
     error = pyqtSignal(str)
 
-    def __init__(self, input_path: str, quality: str):
+    def __init__(self, input_path: str, output_path: str, quality: str):
         super().__init__()
         self.input_path = input_path
+        self.output_path = output_path
         self.quality = quality
         self._cancelled = False
         self._tmpdir: str | None = None
@@ -59,6 +60,7 @@ class ConvertWorker(QObject):
     def _do_convert(self):
         output_path = process_video(
             input_path=self.input_path,
+            output_path=self.output_path,
             output_fps=OUTPUT_FPS,
             quality=self.quality,
             progress_callback=lambda cur, tot: self.progress.emit(cur, tot),
@@ -119,10 +121,10 @@ class DropZone(QLabel):
 
 # Explicit fixed heights for each UI state (preview visible × log visible)
 _WIN_H = {
-    (False, False): 370,   # no preview, no log
-    (True,  False): 540,   # preview shown, no log
-    (False, True):  488,   # no preview, log open
-    (True,  True):  658,   # preview + log open
+    (False, False): 414,   # no preview, no log
+    (True,  False): 584,   # preview shown, no log
+    (False, True):  532,   # no preview, log open
+    (True,  True):  702,   # preview + log open
 }
 
 
@@ -132,8 +134,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("FlowCap")
 
         self._input_path: str | None = None
+        self._output_dir: str | None = None
         self._worker: ConvertWorker | None = None
         self._thread: QThread | None = None
+        self._post_convert: bool = False
 
         self._load_stylesheet()
         self._build_ui()
@@ -227,7 +231,24 @@ class MainWindow(QMainWindow):
 
         self._preview_widget.hide()
         layout.addWidget(self._preview_widget)
-        layout.addSpacing(20)
+        layout.addSpacing(16)
+
+        # ── Output folder row ─────────────────────────────────────────────
+        output_row = QHBoxLayout()
+        output_row.setSpacing(8)
+        output_lbl = QLabel("Save to")
+        output_lbl.setObjectName("sectionLabel")
+        self._output_dir_label = QLabel("Same folder as input")
+        self._output_dir_label.setObjectName("infoLabel")
+        self._output_dir_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._change_output_btn = QPushButton("Change…")
+        self._change_output_btn.setFixedWidth(72)
+        self._change_output_btn.clicked.connect(self._browse_output_dir)
+        output_row.addWidget(output_lbl)
+        output_row.addWidget(self._output_dir_label)
+        output_row.addWidget(self._change_output_btn)
+        layout.addLayout(output_row)
+        layout.addSpacing(12)
 
         # ── Quality + Convert on the same row ────────────────────────────
         action_row = QHBoxLayout()
@@ -243,7 +264,7 @@ class MainWindow(QMainWindow):
         self._convert_btn.setObjectName("convertBtn")
         self._convert_btn.setEnabled(False)
         self._convert_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._convert_btn.clicked.connect(self._start_conversion)
+        self._convert_btn.clicked.connect(self._on_convert_clicked)
         action_row.addWidget(self._convert_btn)
         layout.addLayout(action_row)
         layout.addSpacing(14)
@@ -376,7 +397,45 @@ class MainWindow(QMainWindow):
             if os.path.exists(tmp):
                 os.remove(tmp)
 
+    def _browse_output_dir(self):
+        folder = QFileDialog.getExistingDirectory(self, "Choose Output Folder", "")
+        if folder:
+            self._output_dir = folder
+            self._output_dir_label.setText(Path(folder).name)
+            self._output_dir_label.setToolTip(folder)
+
+    def _get_output_path(self) -> str:
+        p = Path(self._input_path)
+        stem = f"{p.stem}_flowcap.mp4"
+        if self._output_dir:
+            return str(Path(self._output_dir) / stem)
+        return str(p.parent / stem)
+
     # ── Conversion ───────────────────────────────────────────────────────
+
+    def _on_convert_clicked(self):
+        if self._post_convert:
+            self._reset()
+        else:
+            self._start_conversion()
+
+    def _reset(self):
+        self._input_path = None
+        self._post_convert = False
+        self._drop_zone._set_idle_text()
+        self._drop_zone.setStyleSheet("")
+        self._thumb_label.setPixmap(QPixmap())
+        self._thumb_label.setText("—")
+        self._filename_label.setText("")
+        self._info_label.setText("")
+        self._preview_widget.hide()
+        self._done_label.hide()
+        self._open_folder_btn.hide()
+        self._progress_bar.setValue(0)
+        self._status_label.setText("")
+        self._convert_btn.setText("Convert to 60fps")
+        self._convert_btn.setEnabled(False)
+        self._update_size()
 
     def _start_conversion(self):
         if not self._input_path:
@@ -387,6 +446,9 @@ class MainWindow(QMainWindow):
             return
 
         quality = self._quality_combo.currentData()
+        output_path = self._get_output_path()
+        self._post_convert = False
+        self._convert_btn.setText("Convert to 60fps")
         self._convert_btn.setEnabled(False)
         self._done_label.hide()
         self._open_folder_btn.hide()
@@ -395,7 +457,7 @@ class MainWindow(QMainWindow):
         self._log.clear()
         self._log_message("Starting conversion...")
 
-        self._worker = ConvertWorker(self._input_path, quality)
+        self._worker = ConvertWorker(self._input_path, output_path, quality)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
 
@@ -427,9 +489,11 @@ class MainWindow(QMainWindow):
         show_label = "Show in Finder" if sys.platform == "darwin" else "Open Folder"
         self._open_folder_btn.setText(show_label)
         self._open_folder_btn.show()
-        self._convert_btn.setEnabled(True)
         self._progress_bar.setValue(self._progress_bar.maximum())
         self._status_label.setText("Done")
+        self._post_convert = True
+        self._convert_btn.setText("Convert another")
+        self._convert_btn.setEnabled(True)
 
     def _on_error(self, msg: str):
         self._log_message(f"ERROR: {msg}")

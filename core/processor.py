@@ -25,6 +25,7 @@ def process_video(
     input_path: str,
     output_fps: float = 60.0,
     quality: str = QUALITY_BALANCED,
+    output_path: str | None = None,
     progress_callback=None,
     log_callback=None,
     cancel_check=None,
@@ -68,7 +69,8 @@ def process_video(
     audio_path = os.path.join(tmpdir, "audio.aac")
     video_interp_path = os.path.join(tmpdir, "video_interp.mp4")
 
-    output_path = _output_path(input_path)
+    if output_path is None:
+        output_path = _output_path(input_path)
 
     try:
         # ── 3. Extract audio ──────────────────────────────────────────────
