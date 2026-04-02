@@ -264,7 +264,7 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.clicked.connect(self._open_output_folder)
         status_row.addWidget(self._open_folder_btn)
         self._details_btn = QPushButton("Details ▾")
-        self._details_btn.setFixedWidth(72)
+        self._details_btn.setFixedWidth(74)
         self._details_btn.clicked.connect(self._toggle_log)
         status_row.addWidget(self._details_btn)
         layout.addLayout(status_row)
