@@ -8,13 +8,13 @@ import tempfile
 from pathlib import Path
 
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QObject, QSize, QMimeData, QUrl,
+    Qt, QThread, pyqtSignal, QObject, QUrl,
 )
-from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QIcon, QFont
+from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QProgressBar, QTextEdit, QFileDialog,
-    QComboBox, QGroupBox, QSizePolicy, QFrame, QMessageBox,
+    QComboBox, QSizePolicy, QFrame, QMessageBox,
     QApplication,
 )
 
@@ -25,13 +25,19 @@ from core.processor import process_video, QUALITY_BALANCED, QUALITY_HIGH
 SUPPORTED_FORMATS = "Video Files (*.mp4 *.mov *.mkv *.avi);;All Files (*)"
 OUTPUT_FPS = 60.0
 
+# Fixed heights: keyed by log visibility only (preview is inside drop zone now)
+_WIN_H = {
+    False: 430,   # log hidden
+    True:  548,   # log visible
+}
+
 
 # ── Worker thread ────────────────────────────────────────────────────────────
 
 class ConvertWorker(QObject):
-    progress = pyqtSignal(int, int)     # current, total
+    progress = pyqtSignal(int, int)
     log = pyqtSignal(str)
-    finished = pyqtSignal(str)          # output path
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(self, input_path: str, output_path: str, quality: str):
@@ -40,54 +46,114 @@ class ConvertWorker(QObject):
         self.output_path = output_path
         self.quality = quality
         self._cancelled = False
-        self._tmpdir: str | None = None
 
     def cancel(self):
         self._cancelled = True
 
     def run(self):
         try:
-            self._do_convert()
+            output_path = process_video(
+                input_path=self.input_path,
+                output_path=self.output_path,
+                output_fps=OUTPUT_FPS,
+                quality=self.quality,
+                progress_callback=lambda cur, tot: self.progress.emit(cur, tot),
+                log_callback=self.log.emit,
+                cancel_check=lambda: self._cancelled,
+            )
+            if not self._cancelled:
+                self.finished.emit(output_path)
         except Exception as exc:
             self.error.emit(str(exc))
-        finally:
-            if self._tmpdir and os.path.exists(self._tmpdir):
-                try:
-                    shutil.rmtree(self._tmpdir)
-                except Exception:
-                    pass
-
-    def _do_convert(self):
-        output_path = process_video(
-            input_path=self.input_path,
-            output_path=self.output_path,
-            output_fps=OUTPUT_FPS,
-            quality=self.quality,
-            progress_callback=lambda cur, tot: self.progress.emit(cur, tot),
-            log_callback=self.log.emit,
-            cancel_check=lambda: self._cancelled,
-        )
-        if not self._cancelled:
-            self.finished.emit(output_path)
 
 
-# ── Drop Zone widget ─────────────────────────────────────────────────────────
+# ── Drop Zone ────────────────────────────────────────────────────────────────
 
-class DropZone(QLabel):
+class DropZone(QWidget):
     file_dropped = pyqtSignal(str)
     clicked = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.setObjectName("dropZone")
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(120)
-        self._set_idle_text()
 
-    def _set_idle_text(self):
-        self.setText("Drop a video here  ·  or click to browse\nMP4  ·  MOV  ·  MKV  ·  AVI")
+        # ── Idle state ───────────────────────────────────────────────────
+        self._idle_label = QLabel(
+            "Drop a video here  ·  or click to browse\nMP4  ·  MOV  ·  MKV  ·  AVI"
+        )
+        self._idle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._idle_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        # ── Loaded state ─────────────────────────────────────────────────
+        self._thumb_lbl = QLabel()
+        self._thumb_lbl.setFixedSize(160, 90)
+        self._thumb_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._thumb_lbl.setObjectName("thumbnailFrame")
+        self._thumb_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._file_name_lbl = QLabel()
+        self._file_name_lbl.setObjectName("filenameLabel")
+        self._file_name_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._file_info_lbl = QLabel()
+        self._file_info_lbl.setObjectName("infoLabel")
+        self._file_info_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._change_hint = QLabel("Click to change file")
+        self._change_hint.setObjectName("infoLabel")
+        self._change_hint.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        info_col = QWidget()
+        info_col.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        info_col_layout = QVBoxLayout(info_col)
+        info_col_layout.setSpacing(6)
+        info_col_layout.setContentsMargins(0, 0, 0, 0)
+        info_col_layout.addWidget(self._file_name_lbl)
+        info_col_layout.addWidget(self._file_info_lbl)
+        info_col_layout.addSpacing(8)
+        info_col_layout.addWidget(self._change_hint)
+
+        self._loaded_row = QWidget()
+        self._loaded_row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        loaded_layout = QHBoxLayout(self._loaded_row)
+        loaded_layout.setSpacing(20)
+        loaded_layout.setContentsMargins(0, 0, 0, 0)
+        loaded_layout.addWidget(self._thumb_lbl)
+        loaded_layout.addWidget(info_col, 1)
+        self._loaded_row.hide()
+
+        main = QVBoxLayout(self)
+        main.setContentsMargins(20, 16, 20, 16)
+        main.addWidget(self._idle_label, 0, Qt.AlignmentFlag.AlignCenter)
+        main.addWidget(self._loaded_row, 0, Qt.AlignmentFlag.AlignCenter)
+
+    # ── State ────────────────────────────────────────────────────────────
+
+    def set_idle(self):
+        self._loaded_row.hide()
+        self._idle_label.show()
+        self.setStyleSheet("")
+
+    def set_loaded(self, name: str, info: str):
+        self._file_name_lbl.setText(name)
+        self._file_info_lbl.setText(info)
+        self._idle_label.hide()
+        self._loaded_row.show()
+
+    def set_thumbnail(self, pixmap: QPixmap):
+        self._thumb_lbl.setPixmap(
+            pixmap.scaled(160, 90,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation)
+        )
+
+    def set_success(self):
+        self.setStyleSheet("#dropZone { border-color: #34d399; }")
+
+    # ── Events ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
         self.clicked.emit()
@@ -97,7 +163,9 @@ class DropZone(QLabel):
             urls = event.mimeData().urls()
             if urls and self._is_supported(urls[0].toLocalFile()):
                 event.acceptProposedAction()
-                self.setStyleSheet("border-color: #6366f1; color: #9898ff; background-color: #141420;")
+                self.setStyleSheet(
+                    "#dropZone { border-color: #6366f1; color: #9898ff; background-color: #141420; }"
+                )
                 return
         event.ignore()
 
@@ -119,15 +187,6 @@ class DropZone(QLabel):
 
 # ── Main Window ──────────────────────────────────────────────────────────────
 
-# Explicit fixed heights for each UI state (preview visible × log visible)
-_WIN_H = {
-    (False, False): 414,   # no preview, no log
-    (True,  False): 584,   # preview shown, no log
-    (False, True):  532,   # no preview, log open
-    (True,  True):  702,   # preview + log open
-}
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -137,17 +196,17 @@ class MainWindow(QMainWindow):
         self._output_dir: str | None = None
         self._worker: ConvertWorker | None = None
         self._thread: QThread | None = None
+        self._converting: bool = False
         self._post_convert: bool = False
 
         self._load_stylesheet()
         self._build_ui()
-        self.setFixedSize(700, _WIN_H[(False, False)])
+        self.setFixedSize(700, _WIN_H[False])
         self._check_ffmpeg()
 
     # ── Stylesheet ───────────────────────────────────────────────────────
 
     def _load_stylesheet(self):
-        # sys._MEIPASS is set by PyInstaller at runtime; fall back to __file__ in dev
         import sys as _sys
         base = Path(getattr(_sys, "_MEIPASS", Path(__file__).parent.parent))
         qss_path = base / "ui" / "styles.qss"
@@ -171,7 +230,11 @@ class MainWindow(QMainWindow):
         header_row.setSpacing(8)
         title = QLabel("FlowCap")
         title.setObjectName("titleLabel")
-        credit = QLabel('<a href="https://www.youtube.com/channel/UCRVR-SzXYsYZN-6KjAGAn3g" style="color:#333; text-decoration:underline; text-decoration-color:#2a2a2a; font-size:11px;">by Swiftal</a>')
+        credit = QLabel(
+            '<a href="https://www.youtube.com/channel/UCRVR-SzXYsYZN-6KjAGAn3g" '
+            'style="color:#333; text-decoration:underline; text-decoration-color:#2a2a2a; font-size:11px;">'
+            'by Swiftal</a>'
+        )
         credit.setOpenExternalLinks(True)
         credit.setObjectName("creditLabel")
         subtitle = QLabel("Convert to 60fps  ·  Optical flow")
@@ -184,53 +247,19 @@ class MainWindow(QMainWindow):
         layout.addLayout(header_row)
         layout.addSpacing(20)
 
-        # ── FFmpeg warning (hidden by default) ───────────────────────────
+        # ── FFmpeg warning ───────────────────────────────────────────────
         self._ffmpeg_warn = QLabel()
         self._ffmpeg_warn.setObjectName("errorLabel")
         self._ffmpeg_warn.setWordWrap(True)
         self._ffmpeg_warn.hide()
         layout.addWidget(self._ffmpeg_warn)
 
-        # ── Drop zone — clickable, no separate browse button ─────────────
+        # ── Drop zone (contains preview when loaded) ──────────────────────
         layout.addSpacing(12)
         self._drop_zone = DropZone()
         self._drop_zone.file_dropped.connect(self._on_file_selected)
         self._drop_zone.clicked.connect(self._browse_file)
         layout.addWidget(self._drop_zone)
-        layout.addSpacing(20)
-
-        # ── File preview — hidden until a file is loaded ─────────────────
-        self._preview_widget = QWidget()
-        preview_col = QVBoxLayout(self._preview_widget)
-        preview_col.setSpacing(8)
-        preview_col.setContentsMargins(0, 0, 0, 0)
-
-        self._thumb_frame = QFrame()
-        self._thumb_frame.setObjectName("thumbnailFrame")
-        self._thumb_frame.setFixedSize(200, 112)
-        thumb_layout = QVBoxLayout(self._thumb_frame)
-        thumb_layout.setContentsMargins(0, 0, 0, 0)
-        self._thumb_label = QLabel()
-        self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._thumb_label.setFixedSize(200, 112)
-        self._thumb_label.setText("—")
-        self._thumb_label.setStyleSheet("color: #2a2a2a; font-size: 18px;")
-        thumb_layout.addWidget(self._thumb_label)
-
-        self._filename_label = QLabel()
-        self._filename_label.setObjectName("filenameLabel")
-        self._filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self._info_label = QLabel()
-        self._info_label.setObjectName("infoLabel")
-        self._info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        preview_col.addWidget(self._thumb_frame, 0, Qt.AlignmentFlag.AlignHCenter)
-        preview_col.addWidget(self._filename_label, 0, Qt.AlignmentFlag.AlignHCenter)
-        preview_col.addWidget(self._info_label, 0, Qt.AlignmentFlag.AlignHCenter)
-
-        self._preview_widget.hide()
-        layout.addWidget(self._preview_widget)
         layout.addSpacing(16)
 
         # ── Output folder row ─────────────────────────────────────────────
@@ -250,7 +279,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(output_row)
         layout.addSpacing(12)
 
-        # ── Quality + Convert on the same row ────────────────────────────
+        # ── Quality + Convert ─────────────────────────────────────────────
         action_row = QHBoxLayout()
         action_row.setSpacing(10)
         quality_label = QLabel("Quality")
@@ -269,7 +298,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(action_row)
         layout.addSpacing(14)
 
-        # ── Progress bar ─────────────────────────────────────────────────
+        # ── Progress bar ──────────────────────────────────────────────────
         self._progress_bar = QProgressBar()
         self._progress_bar.setValue(0)
         self._progress_bar.setTextVisible(False)
@@ -277,7 +306,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._progress_bar)
         layout.addSpacing(6)
 
-        # ── Status + open folder + details toggle ────────────────────────
+        # ── Status row ────────────────────────────────────────────────────
         status_row = QHBoxLayout()
         status_row.setSpacing(8)
         self._status_label = QLabel("")
@@ -300,7 +329,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(status_row)
         layout.addSpacing(8)
 
-        # ── Log console — hidden by default, shown via Details toggle ────
+        # ── Log console ───────────────────────────────────────────────────
         self._log = QTextEdit()
         self._log.setObjectName("logConsole")
         self._log.setReadOnly(True)
@@ -308,14 +337,13 @@ class MainWindow(QMainWindow):
         self._log.hide()
         layout.addWidget(self._log)
 
-
     # ── FFmpeg check ─────────────────────────────────────────────────────
 
     def _check_ffmpeg(self):
         ffmpeg, ffprobe = find_ffmpeg()
         if not ffmpeg or not ffprobe:
             msg = (
-                "FFmpeg / ffprobe not found in PATH.\n"
+                "FFmpeg / ffprobe not found.\n"
                 "Install via: brew install ffmpeg  (macOS)  |  "
                 "winget install ffmpeg  (Windows)  |  "
                 "apt install ffmpeg  (Ubuntu)\n"
@@ -329,51 +357,49 @@ class MainWindow(QMainWindow):
             self._log_message(f"FFmpeg found: {ffmpeg}")
             self._log_message(f"ffprobe found: {ffprobe}")
 
-    # ── File selection ───────────────────────────────────────────────────
+    # ── File selection ────────────────────────────────────────────────────
 
     def _browse_file(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Video", "", SUPPORTED_FORMATS
-        )
+        if self._converting:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Select Video", "", SUPPORTED_FORMATS)
         if path:
             self._on_file_selected(path)
 
     def _on_file_selected(self, path: str):
+        if self._converting:
+            return
         self._input_path = path
+        self._post_convert = False
         self._done_label.hide()
         self._open_folder_btn.hide()
         self._progress_bar.setValue(0)
-
         self._status_label.setText("")
-        self._log_message(f"Loaded: {path}")
-        self._drop_zone.setText(f"✓  {Path(path).name}")
-        if not self._preview_widget.isVisible():
-            self._preview_widget.show()
-            self._update_size()
+        self._convert_btn.setText("Convert to 60fps")
 
-        # Probe
+        name = Path(path).name
+        self._drop_zone.set_loaded(name, "Probing…")
+        self._log_message(f"Loaded: {path}")
+
         try:
             info = probe_video(path)
-            self._filename_label.setText(Path(path).name)
-            self._info_label.setText(
+            info_str = (
                 f"{info['width']} × {info['height']}  ·  "
                 f"{info['fps']:.3f} fps  ·  "
                 f"{info['duration']:.1f}s  ·  "
                 f"Audio: {'Yes' if info['has_audio'] else 'No'}"
             )
+            self._drop_zone.set_loaded(name, info_str)
             self._log_message(
                 f"  {info['width']}x{info['height']} @ {info['fps']:.3f} fps, "
                 f"{info['duration']:.2f}s"
             )
         except Exception as exc:
-            self._filename_label.setText(Path(path).name)
-            self._info_label.setText(f"Could not probe: {exc}")
+            self._drop_zone.set_loaded(name, f"Could not probe: {exc}")
             self._log_message(f"Probe error: {exc}")
 
-        # Thumbnail
         self._load_thumbnail(path)
 
-        # Enable convert if ffmpeg available
         ffmpeg, ffprobe = find_ffmpeg()
         if ffmpeg and ffprobe:
             self._convert_btn.setEnabled(True)
@@ -384,13 +410,8 @@ class MainWindow(QMainWindow):
             ok = extract_thumbnail(path, tmp, time=0.0)
             if ok:
                 pix = QPixmap(tmp)
-                pix = pix.scaled(
-                    200, 112,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                self._thumb_label.setPixmap(pix)
-                self._thumb_label.setText("")
+                if not pix.isNull():
+                    self._drop_zone.set_thumbnail(pix)
         except Exception:
             pass
         finally:
@@ -414,42 +435,44 @@ class MainWindow(QMainWindow):
     # ── Conversion ───────────────────────────────────────────────────────
 
     def _on_convert_clicked(self):
-        if self._post_convert:
+        if self._converting:
+            self._cancel_conversion()
+        elif self._post_convert:
             self._reset()
         else:
             self._start_conversion()
 
+    def _cancel_conversion(self):
+        if self._worker:
+            self._worker.cancel()
+        self._converting = False
+        self._convert_btn.setText("Convert to 60fps")
+        self._convert_btn.setEnabled(True)
+        self._status_label.setText("Cancelled")
+
     def _reset(self):
         self._input_path = None
         self._post_convert = False
-        self._drop_zone._set_idle_text()
-        self._drop_zone.setStyleSheet("")
-        self._thumb_label.setPixmap(QPixmap())
-        self._thumb_label.setText("—")
-        self._filename_label.setText("")
-        self._info_label.setText("")
-        self._preview_widget.hide()
+        self._drop_zone.set_idle()
         self._done_label.hide()
         self._open_folder_btn.hide()
         self._progress_bar.setValue(0)
         self._status_label.setText("")
         self._convert_btn.setText("Convert to 60fps")
         self._convert_btn.setEnabled(False)
-        self._update_size()
 
     def _start_conversion(self):
         if not self._input_path:
             return
-
-        # Guard: don't start a second conversion if one is still running
         if self._thread is not None and self._thread.isRunning():
             return
 
         quality = self._quality_combo.currentData()
         output_path = self._get_output_path()
+        self._converting = True
         self._post_convert = False
-        self._convert_btn.setText("Convert to 60fps")
-        self._convert_btn.setEnabled(False)
+        self._convert_btn.setText("Cancel")
+        self._convert_btn.setEnabled(True)
         self._done_label.hide()
         self._open_folder_btn.hide()
         self._progress_bar.setValue(0)
@@ -467,7 +490,6 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(self._on_done)
         self._worker.error.connect(self._on_error)
 
-        # Cleanup
         self._worker.finished.connect(self._thread.quit)
         self._worker.error.connect(self._thread.quit)
         self._thread.finished.connect(self._worker.deleteLater)
@@ -484,6 +506,8 @@ class MainWindow(QMainWindow):
 
     def _on_done(self, output_path: str):
         self._output_path = output_path
+        self._converting = False
+        self._post_convert = True
         self._done_label.setText(f"Saved → {Path(output_path).name}")
         self._done_label.show()
         show_label = "Show in Finder" if sys.platform == "darwin" else "Open Folder"
@@ -491,12 +515,14 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.show()
         self._progress_bar.setValue(self._progress_bar.maximum())
         self._status_label.setText("Done")
-        self._post_convert = True
         self._convert_btn.setText("Convert another")
         self._convert_btn.setEnabled(True)
+        self._drop_zone.set_success()
 
     def _on_error(self, msg: str):
+        self._converting = False
         self._log_message(f"ERROR: {msg}")
+        self._convert_btn.setText("Convert to 60fps")
         self._convert_btn.setEnabled(True)
         QMessageBox.critical(self, "Conversion Error", msg)
 
@@ -522,12 +548,10 @@ class MainWindow(QMainWindow):
         self._update_size()
 
     def _update_size(self):
-        key = (self._preview_widget.isVisible(), self._log.isVisible())
-        self.setFixedSize(700, _WIN_H[key])
+        self.setFixedSize(700, _WIN_H[self._log.isVisible()])
 
     def _log_message(self, msg: str):
         self._log.append(msg)
-        # Scroll to bottom
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
 

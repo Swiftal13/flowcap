@@ -51,6 +51,10 @@ QGroupBox::title {
     background-color: #141420;
 }
 
+#dropZone[success="true"] {
+    border-color: #34d399;
+}
+
 /* ── Buttons ────────────────────────────────────────────────────────── */
 QPushButton {
     background-color: #1c1c1c;
@@ -81,9 +85,9 @@ QPushButton:disabled {
     background-color: #6366f1;
     color: #fff;
     border: none;
-    border-radius: 6px;
-    padding: 10px 0;
-    font-size: 13px;
+    border-radius: 5px;
+    padding: 8px 16px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.2px;
 }
@@ -156,13 +160,23 @@ QLabel#subtitleLabel {
     letter-spacing: 0.2px;
 }
 
+QLabel#filenameLabel {
+    color: #d0d0d0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 QLabel#infoLabel {
-    color: #888;
-    font-size: 12px;
+    color: #555;
+    font-size: 11px;
     background-color: transparent;
     border: none;
-    padding: 4px 0;
-    line-height: 1.6;
+    padding: 0;
+}
+
+QLabel#sectionLabel {
+    color: #444;
+    font-size: 11px;
 }
 
 QLabel#doneLabel {
@@ -251,7 +265,8 @@ QScrollBar::handle:horizontal {
 QLabel#creditLabel {
     color: #333;
     font-size: 11px;
-    padding-top: 6px;
+    padding-top: 8px;
+    margin-left: -4px;
 }
 
 QLabel#creditLabel:hover {
