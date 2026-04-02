@@ -117,24 +117,27 @@ class DropZone(QLabel):
 
 # ── Main Window ──────────────────────────────────────────────────────────────
 
-# Fixed pixel deltas — must match the layout values in _build_ui exactly
-_LOG_SECTION_H = 118      # 110px log + 8px spacing above it
-_PREVIEW_SECTION_H = 182  # thumbnail(112) + labels(~46) + inner spacing(16) + outer spacing(8)
+# Explicit fixed heights for each UI state (preview visible × log visible)
+_WIN_H = {
+    (False, False): 370,   # no preview, no log
+    (True,  False): 540,   # preview shown, no log
+    (False, True):  488,   # no preview, log open
+    (True,  True):  658,   # preview + log open
+}
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FlowCap")
-        self.setFixedWidth(700)
 
         self._input_path: str | None = None
         self._worker: ConvertWorker | None = None
         self._thread: QThread | None = None
-        self._height_before_log: int = 0
 
         self._load_stylesheet()
         self._build_ui()
+        self.setFixedSize(700, _WIN_H[(False, False)])
         self._check_ffmpeg()
 
     # ── Stylesheet ───────────────────────────────────────────────────────
@@ -284,9 +287,6 @@ class MainWindow(QMainWindow):
         self._log.hide()
         layout.addWidget(self._log)
 
-        # Absorb all surplus height here so content never expands into empty space
-        layout.addStretch()
-
 
     # ── FFmpeg check ─────────────────────────────────────────────────────
 
@@ -328,7 +328,7 @@ class MainWindow(QMainWindow):
         self._drop_zone.setText(f"✓  {Path(path).name}")
         if not self._preview_widget.isVisible():
             self._preview_widget.show()
-            self.resize(self.width(), self.height() + _PREVIEW_SECTION_H)
+            self._update_size()
 
         # Probe
         try:
@@ -452,12 +452,14 @@ class MainWindow(QMainWindow):
         if self._log.isVisible():
             self._log.hide()
             self._details_btn.setText("Details ▾")
-            self.resize(self.width(), self._height_before_log)
         else:
-            self._height_before_log = self.height()
             self._log.show()
             self._details_btn.setText("Details ▲")
-            self.resize(self.width(), self.height() + _LOG_SECTION_H)
+        self._update_size()
+
+    def _update_size(self):
+        key = (self._preview_widget.isVisible(), self._log.isVisible())
+        self.setFixedSize(700, _WIN_H[key])
 
     def _log_message(self, msg: str):
         self._log.append(msg)
