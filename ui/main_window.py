@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         header_row.addWidget(credit)
         header_row.addStretch()
         header_row.addWidget(subtitle)
-        header_row.setAlignment(subtitle, Qt.AlignmentFlag.AlignBottom)
+        header_row.setAlignment(subtitle, Qt.AlignmentFlag.AlignVCenter)
         layout.addLayout(header_row)
         layout.addSpacing(20)
 
