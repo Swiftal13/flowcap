@@ -62,16 +62,14 @@ def process_video(
         f"{duration:.2f}s  audio={'yes' if has_audio else 'no'}"
     )
 
-    # ── How many RIFE passes? ─────────────────────────────────────────────
-    # Each pass doubles the frame count. Minimum passes set by quality:
-    #   balanced → 2 passes minimum (extract at output_fps/4, e.g. 15fps → 30 → 60)
-    #   high     → 3 passes minimum (extract at output_fps/8, e.g. 7.5fps → 15 → 30 → 60)
-    # More passes = more synthesised frames between originals = smoother motion.
-    min_passes = 3 if quality == QUALITY_HIGH else 2
-    passes = min_passes
-
-    # The fps we extract frames at — RIFE will double it `passes` times to reach output_fps
-    extract_fps = output_fps / (2 ** passes)
+    # ── RIFE pass strategy ────────────────────────────────────────────────
+    # Always extract at the original fps and do exactly 1 RIFE pass to double
+    # the frame count. FFmpeg then resamples to output_fps.
+    # This ensures RIFE only synthesises 1 frame between adjacent originals —
+    # the frames are close together so motion estimation is accurate and clean.
+    # Doing multiple passes with sub-sampled input creates warping artifacts.
+    passes = 1
+    extract_fps = input_fps  # extract at original fps, no downsampling
 
     total_input_frames = max(1, int(round(duration * extract_fps)))
     total_output_frames = max(1, int(round(duration * output_fps)))
