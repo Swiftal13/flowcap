@@ -117,6 +117,11 @@ class DropZone(QLabel):
 
 # ── Main Window ──────────────────────────────────────────────────────────────
 
+# Fixed pixel deltas — must match the layout values in _build_ui exactly
+_LOG_SECTION_H = 118      # 110px log + 8px spacing above it
+_PREVIEW_SECTION_H = 182  # thumbnail(112) + labels(~46) + inner spacing(16) + outer spacing(8)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -317,8 +322,9 @@ class MainWindow(QMainWindow):
         self._status_label.setText("")
         self._log_message(f"Loaded: {path}")
         self._drop_zone.setText(f"✓  {Path(path).name}")
-        self._preview_widget.show()
-        self._fit_height()
+        if not self._preview_widget.isVisible():
+            self._preview_widget.show()
+            self.resize(self.width(), self.height() + _PREVIEW_SECTION_H)
 
         # Probe
         try:
@@ -442,14 +448,11 @@ class MainWindow(QMainWindow):
         if self._log.isVisible():
             self._log.hide()
             self._details_btn.setText("Details ▾")
+            self.resize(self.width(), self.height() - _LOG_SECTION_H)
         else:
             self._log.show()
             self._details_btn.setText("Details ▲")
-        self._fit_height()
-
-    def _fit_height(self):
-        self.centralWidget().adjustSize()
-        self.resize(self.width(), self.centralWidget().sizeHint().height())
+            self.resize(self.width(), self.height() + _LOG_SECTION_H)
 
     def _log_message(self, msg: str):
         self._log.append(msg)
