@@ -38,9 +38,9 @@ def probe_video(input_path: str) -> dict:
     Run ffprobe and return:
       fps, width, height, duration (seconds), has_audio
     """
-    ffprobe = shutil.which("ffprobe")
+    _, ffprobe = find_ffmpeg()
     if not ffprobe:
-        raise RuntimeError("ffprobe not found in PATH.")
+        raise RuntimeError("ffprobe not found.")
 
     cmd = [
         ffprobe, "-v", "quiet",
@@ -117,9 +117,9 @@ def interpolate_video(
       4× → each 60fps frame blends 4 × (1/240s) = 1/60s of motion  ← natural
       8× → same window, finer intermediate sampling                  ← smoother
     """
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg, _ = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found in PATH.")
+        raise RuntimeError("ffmpeg not found.")
 
     if quality == "high":
         blend_factor = 8
@@ -231,9 +231,9 @@ def interpolate_video(
 
 def extract_audio(input_path: str, audio_path: str) -> bool:
     """Copy audio stream to audio_path. Returns True on success."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg, _ = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found in PATH.")
+        raise RuntimeError("ffmpeg not found.")
 
     proc = subprocess.run(
         [ffmpeg, "-y", "-i", input_path, "-vn", "-acodec", "copy", audio_path],
@@ -244,9 +244,9 @@ def extract_audio(input_path: str, audio_path: str) -> bool:
 
 def mux_audio(video_path: str, audio_path: str, output_path: str) -> None:
     """Mux video and audio streams into output_path."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg, _ = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found in PATH.")
+        raise RuntimeError("ffmpeg not found.")
 
     proc = subprocess.run(
         [
@@ -267,7 +267,7 @@ def mux_audio(video_path: str, audio_path: str, output_path: str) -> None:
 
 def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -> bool:
     """Extract a single JPEG frame at `time` seconds."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg, _ = find_ffmpeg()
     if not ffmpeg:
         return False
     proc = subprocess.run(
