@@ -63,14 +63,12 @@ def process_video(
     )
 
     # ── How many RIFE passes? ─────────────────────────────────────────────
-    # Each pass doubles the frame count. Always at least 1 pass so RIFE
-    # runs even for high-fps input (e.g. 99fps → extract at 30fps → RIFE → 60fps).
-    passes = 1
-    rife_fps = input_fps
-    while rife_fps * (2 ** passes) < output_fps * 0.99:
-        passes += 1
-        if passes >= 3:
-            break
+    # Each pass doubles the frame count. Minimum passes set by quality:
+    #   balanced → 2 passes minimum (extract at output_fps/4, e.g. 15fps → 30 → 60)
+    #   high     → 3 passes minimum (extract at output_fps/8, e.g. 7.5fps → 15 → 30 → 60)
+    # More passes = more synthesised frames between originals = smoother motion.
+    min_passes = 3 if quality == QUALITY_HIGH else 2
+    passes = min_passes
 
     # The fps we extract frames at — RIFE will double it `passes` times to reach output_fps
     extract_fps = output_fps / (2 ** passes)
