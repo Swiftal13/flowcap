@@ -85,7 +85,7 @@ class DropZone(QWidget):
             "Drop a video here  ·  or click to browse\nMP4  ·  MOV  ·  MKV  ·  AVI"
         )
         self._idle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._idle_label.setStyleSheet("color: #444; font-size: 13px; background: transparent; border: none;")
+        self._idle_label.setStyleSheet("color: #888; font-size: 13px; background: transparent; border: none;")
         self._idle_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         # ── Loaded state ─────────────────────────────────────────────────
