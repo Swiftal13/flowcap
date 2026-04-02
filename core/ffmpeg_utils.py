@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import math
+from pathlib import Path
 
 
 def find_ffmpeg() -> tuple[str | None, str | None]:
