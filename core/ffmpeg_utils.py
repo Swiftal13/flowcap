@@ -276,3 +276,167 @@ def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -
         capture_output=True, text=True,
     )
     return proc.returncode == 0 and os.path.exists(thumbnail_path)
+
+
+def extract_frames(
+    input_path: str,
+    output_dir: str,
+    log_callback=None,
+    progress_callback=None,
+    total_frames: int = 0,
+    cancel_check=None,
+) -> int:
+    """
+    Extract every frame from input_path as PNG images into output_dir.
+    Returns the number of frames extracted.
+    """
+    ffmpeg, _ = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found.")
+
+    pattern = os.path.join(output_dir, "%08d.png")
+    cmd = [
+        ffmpeg, "-y",
+        "-i", input_path,
+        "-vsync", "0",
+        pattern,
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        text=True,
+        bufsize=0,
+    )
+
+    frame_re = re.compile(r"frame=\s*(\d+)")
+    buf = ""
+    last_logged_pct = -1
+
+    while True:
+        ch = proc.stderr.read(1)
+        if not ch:
+            break
+        if cancel_check and cancel_check():
+            proc.terminate()
+            proc.wait()
+            return 0
+        if ch in ("\r", "\n"):
+            m = frame_re.search(buf)
+            if m and total_frames > 0:
+                current = int(m.group(1))
+                if progress_callback:
+                    progress_callback(min(current, total_frames), total_frames)
+                if log_callback:
+                    pct = int(100 * current / total_frames)
+                    if pct >= last_logged_pct + 10:
+                        last_logged_pct = pct
+                        log_callback(f"  Extracting frames: {pct}%")
+            buf = ""
+        else:
+            buf += ch
+
+    proc.wait()
+    if proc.returncode not in (0, None):
+        raise RuntimeError(f"FFmpeg frame extraction failed (exit {proc.returncode})")
+
+    count = len(list(Path(output_dir).glob("*.png")))
+    if log_callback:
+        log_callback(f"  Extracted {count} frames.")
+    return count
+
+
+def encode_frames(
+    frames_dir: str,
+    output_path: str,
+    frame_rate: float,
+    output_fps: float,
+    log_callback=None,
+    progress_callback=None,
+    total_frames: int = 0,
+    cancel_check=None,
+) -> None:
+    """
+    Encode a directory of PNG frames to video.
+    frame_rate: effective fps of the image sequence (2× input fps after RIFE)
+    output_fps: desired output fps (e.g. 60)
+    """
+    from pathlib import Path as _Path
+
+    ffmpeg, _ = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found.")
+
+    frames = sorted(
+        _Path(frames_dir).glob("*.png"),
+        key=lambda f: int(f.stem) if f.stem.isdigit() else int(f.stem.lstrip("0") or "0")
+    )
+    if not frames:
+        raise RuntimeError(f"No PNG frames found in {frames_dir}")
+
+    # Build concat list with explicit frame durations for accurate fps conversion
+    concat_file = _Path(frames_dir) / "_concat.txt"
+    duration = 1.0 / frame_rate
+    with open(concat_file, "w") as f:
+        for frame in frames:
+            f.write(f"file '{frame.as_posix()}'\n")
+            f.write(f"duration {duration:.10f}\n")
+        # Concat demuxer requires a trailing entry without duration
+        f.write(f"file '{frames[-1].as_posix()}'\n")
+
+    cmd = [
+        ffmpeg, "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(concat_file),
+        "-vf", f"fps={int(output_fps)}",
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-preset", "fast",
+        "-movflags", "+faststart",
+        output_path,
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        text=True,
+        bufsize=0,
+    )
+
+    frame_re = re.compile(r"frame=\s*(\d+)")
+    buf = ""
+    last_logged_pct = -1
+
+    while True:
+        ch = proc.stderr.read(1)
+        if not ch:
+            break
+        if cancel_check and cancel_check():
+            proc.terminate()
+            proc.wait()
+            return
+        if ch in ("\r", "\n"):
+            m = frame_re.search(buf)
+            if m and total_frames > 0:
+                current = int(m.group(1))
+                if progress_callback:
+                    progress_callback(min(current, total_frames), total_frames)
+                if log_callback:
+                    pct = int(100 * current / total_frames)
+                    if pct >= last_logged_pct + 5:
+                        last_logged_pct = pct
+                        log_callback(f"  Encoding: {pct}%  (frame {current} / {total_frames})")
+            buf = ""
+        else:
+            buf += ch
+
+    proc.wait()
+    if proc.returncode not in (0, None):
+        raise RuntimeError(f"FFmpeg encoding failed (exit {proc.returncode})")
+
+
+# Keep Path import available for extract_frames return
+from pathlib import Path

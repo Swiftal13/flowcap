@@ -16,6 +16,19 @@ for _name in ('ffmpeg', 'ffprobe'):
     if _p.exists():
         _binaries.append((str(_p), 'vendor'))
 
+# Collect rife-ncnn-vulkan binary + model files from vendor/rife/
+_rife_dir = _vendor / 'rife'
+if _rife_dir.exists():
+    _rife_bin = _rife_dir / f'rife-ncnn-vulkan{_suffix}'
+    if _rife_bin.exists():
+        _binaries.append((str(_rife_bin), 'vendor/rife'))
+    # Bundle all model subdirectories (rife-v4.6/, etc.)
+    for _model_dir in _rife_dir.iterdir():
+        if _model_dir.is_dir():
+            for _model_file in _model_dir.iterdir():
+                if _model_file.is_file():
+                    _binaries.append((str(_model_file), f'vendor/rife/{_model_dir.name}'))
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],

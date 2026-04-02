@@ -1,10 +1,17 @@
 """
-FlowCap processor — orchestrates the interpolation pipeline.
+FlowCap processor — RIFE GPU interpolation pipeline.
 
-Uses FFmpeg's minterpolate filter instead of hand-rolled optical flow.
-No OpenCV or numpy required here anymore.
+Pipeline:
+  1. Probe input video
+  2. Extract audio (if present)
+  3. Extract frames to disk (PNG via ffmpeg)
+  4. Run rife-ncnn-vulkan (GPU via Vulkan) — one or two passes to reach target fps
+  5. Encode interpolated frames back to video (ffmpeg)
+  6. Mux audio back in
+  7. Clean up temp files
 """
 
+import math
 import os
 import shutil
 import tempfile
@@ -12,10 +19,12 @@ from pathlib import Path
 
 from core.ffmpeg_utils import (
     probe_video,
-    interpolate_video,
     extract_audio,
     mux_audio,
+    extract_frames,
+    encode_frames,
 )
+from core.rife_utils import find_rife, pick_model, interpolate_rife
 
 QUALITY_BALANCED = "balanced"
 QUALITY_HIGH = "high"
@@ -30,90 +39,164 @@ def process_video(
     log_callback=None,
     cancel_check=None,
 ) -> str:
-    """
-    Full pipeline:
-      1. Probe input
-      2. Extract audio (if present)
-      3. Interpolate video to output_fps via FFmpeg minterpolate
-      4. Mux audio back in
-      5. Clean up temp files
-
-    Returns the path to the final output file.
-    """
     def log(msg: str):
         if log_callback:
             log_callback(msg)
 
-    # ── 1. Probe ─────────────────────────────────────────────────────────
+    def cancelled() -> bool:
+        return cancel_check is not None and cancel_check()
+
+    # ── Output path ───────────────────────────────────────────────────────
+    if output_path is None:
+        p = Path(input_path)
+        output_path = str(p.parent / f"{p.stem}_flowcap.mp4")
+
+    # ── 1. Probe ──────────────────────────────────────────────────────────
     log("Probing input video...")
     info = probe_video(input_path)
     input_fps = info["fps"]
     has_audio = info["has_audio"]
     duration = info["duration"]
-
     log(
-        f"  {info['width']}×{info['height']}  "
-        f"{input_fps:.3f} fps  "
-        f"{duration:.2f}s  "
-        f"audio={'yes' if has_audio else 'no'}"
+        f"  {info['width']}×{info['height']}  {input_fps:.3f} fps  "
+        f"{duration:.2f}s  audio={'yes' if has_audio else 'no'}"
     )
 
-    if abs(input_fps - output_fps) < 0.1:
-        log(f"  Note: input is already ~{input_fps:.1f} fps — re-encoding at exactly {output_fps:.0f} fps.")
+    # ── How many RIFE passes? ─────────────────────────────────────────────
+    # Each pass doubles the frame count. Keep doubling until we reach output_fps.
+    passes = 0
+    rife_fps = input_fps
+    while rife_fps < output_fps * 0.99:
+        rife_fps *= 2
+        passes += 1
+        if passes >= 3:
+            break
 
+    if passes == 0:
+        log(f"  Input is already >= {output_fps:.0f} fps — re-encoding only.")
+
+    total_input_frames = max(1, int(round(duration * input_fps)))
     total_output_frames = max(1, int(round(duration * output_fps)))
+    log(f"  RIFE passes: {passes}   intermediate fps: {rife_fps:.0f}")
     log(f"  Expected output: ~{total_output_frames} frames @ {output_fps:.0f} fps")
 
-    # ── 2. Temp workspace ─────────────────────────────────────────────────
+    # ── RIFE binary ───────────────────────────────────────────────────────
+    rife_bin, rife_dir = find_rife()
+    if not rife_bin:
+        raise RuntimeError(
+            "rife-ncnn-vulkan not found. Run: python vendor_ffmpeg.py"
+        )
+    model_name = pick_model(rife_dir)
+    model_path = str(Path(rife_dir) / model_name)
+    uhd = (quality == QUALITY_HIGH)
+    log(f"  RIFE binary: {rife_bin}")
+    log(f"  Model: {model_name}   UHD: {uhd}")
+
+    # ── Temp workspace ────────────────────────────────────────────────────
     tmpdir = tempfile.mkdtemp(prefix="flowcap_")
     audio_path = os.path.join(tmpdir, "audio.aac")
-    video_interp_path = os.path.join(tmpdir, "video_interp.mp4")
+    frames_in_dir = os.path.join(tmpdir, "frames_in")
+    frames_out_dir = os.path.join(tmpdir, "frames_out")
+    video_no_audio = os.path.join(tmpdir, "video_noaudio.mp4")
+    os.makedirs(frames_in_dir)
+    os.makedirs(frames_out_dir)
 
-    if output_path is None:
-        output_path = _output_path(input_path)
+    # Progress stage weights: extract=10%, rife=75%, encode=15%
+    def _stage_cb(start_frac, end_frac):
+        def cb(cur, tot):
+            if not progress_callback or tot <= 0:
+                return
+            frac = cur / tot
+            mapped = int((start_frac + frac * (end_frac - start_frac)) * total_output_frames)
+            progress_callback(mapped, total_output_frames)
+        return cb
 
     try:
-        # ── 3. Extract audio ──────────────────────────────────────────────
+        # ── 2. Extract audio ──────────────────────────────────────────────
         if has_audio:
             log("Extracting audio track...")
             has_audio = extract_audio(input_path, audio_path)
-            log("  Audio extracted." if has_audio else "  No audio found — continuing without it.")
 
-        if cancel_check and cancel_check():
+        if cancelled():
             return output_path
 
-        # ── 4. Interpolate video ──────────────────────────────────────────
-        log(f"Starting motion-interpolation to {output_fps:.0f} fps...")
-        interp_target = video_interp_path if has_audio else output_path
-
-        interpolate_video(
-            input_path=input_path,
-            output_path=interp_target,
-            input_fps=input_fps,
-            output_fps=output_fps,
-            quality=quality,
+        # ── 3. Extract frames ─────────────────────────────────────────────
+        log("Extracting frames from video...")
+        n_frames = extract_frames(
+            input_path, frames_in_dir,
             log_callback=log_callback,
-            progress_callback=progress_callback,
-            total_output_frames=total_output_frames,
+            progress_callback=_stage_cb(0.0, 0.10),
+            total_frames=total_input_frames,
             cancel_check=cancel_check,
         )
+        if cancelled():
+            return output_path
+        log(f"  Extracted {n_frames} frames.")
 
-        if cancel_check and cancel_check():
+        if passes == 0:
+            # No interpolation needed — just re-encode at output fps
+            frames_final_dir = frames_in_dir
+            final_frame_rate = input_fps
+        else:
+            # ── 4. RIFE interpolation passes ─────────────────────────────
+            current_in = frames_in_dir
+            current_fps = input_fps
+
+            for pass_num in range(passes):
+                pass_out = os.path.join(tmpdir, f"rife_pass{pass_num + 1}")
+                os.makedirs(pass_out, exist_ok=True)
+
+                pass_start = 0.10 + (pass_num / passes) * 0.75
+                pass_end = 0.10 + ((pass_num + 1) / passes) * 0.75
+
+                n_in = len(list(Path(current_in).glob("*.png")))
+                expected_out = max(1, 2 * n_in - 1)
+
+                log(f"RIFE pass {pass_num + 1}/{passes}  ({n_in} frames → ~{expected_out} frames)...")
+                interpolate_rife(
+                    input_dir=current_in,
+                    output_dir=pass_out,
+                    rife_bin=rife_bin,
+                    model_path=model_path,
+                    uhd=uhd,
+                    log_callback=log_callback,
+                    progress_callback=_stage_cb(pass_start, pass_end),
+                    expected_output_frames=expected_out,
+                    cancel_check=cancel_check,
+                )
+                if cancelled():
+                    return output_path
+
+                current_in = pass_out
+                current_fps *= 2
+                log(f"  Pass {pass_num + 1} done.")
+
+            frames_final_dir = current_in
+            final_frame_rate = current_fps
+
+        # ── 5. Encode frames ──────────────────────────────────────────────
+        encode_target = video_no_audio if has_audio else output_path
+        log(f"Encoding {int(output_fps)} fps video...")
+        encode_frames(
+            frames_dir=frames_final_dir,
+            output_path=encode_target,
+            frame_rate=final_frame_rate,
+            output_fps=output_fps,
+            log_callback=log_callback,
+            progress_callback=_stage_cb(0.85, 1.0),
+            total_frames=total_output_frames,
+            cancel_check=cancel_check,
+        )
+        if cancelled():
             return output_path
 
-        # ── 5. Mux audio ──────────────────────────────────────────────────
+        # ── 6. Mux audio ──────────────────────────────────────────────────
         if has_audio:
-            log("Muxing audio into final file...")
-            mux_audio(video_interp_path, audio_path, output_path)
-            log("  Done.")
+            log("Muxing audio...")
+            mux_audio(video_no_audio, audio_path, output_path)
 
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     log(f"Output: {output_path}")
     return output_path
-
-
-def _output_path(input_path: str) -> str:
-    p = Path(input_path)
-    return str(p.parent / f"{p.stem}_flowcap.mp4")
