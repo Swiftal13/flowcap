@@ -283,6 +283,9 @@ class MainWindow(QMainWindow):
         self._log.hide()
         layout.addWidget(self._log)
 
+        # Absorb all surplus height here so content never expands into empty space
+        layout.addStretch()
+
 
     # ── FFmpeg check ─────────────────────────────────────────────────────
 
