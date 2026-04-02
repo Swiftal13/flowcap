@@ -138,39 +138,39 @@ def process_video(
         current_in = frames_in_dir
         current_fps = extract_fps
 
-            for pass_num in range(passes):
-                pass_out = os.path.join(tmpdir, f"rife_pass{pass_num + 1}")
-                os.makedirs(pass_out, exist_ok=True)
+        for pass_num in range(passes):
+            pass_out = os.path.join(tmpdir, f"rife_pass{pass_num + 1}")
+            os.makedirs(pass_out, exist_ok=True)
 
-                pass_start = 0.10 + (pass_num / passes) * 0.75
-                pass_end = 0.10 + ((pass_num + 1) / passes) * 0.75
+            pass_start = 0.10 + (pass_num / passes) * 0.75
+            pass_end = 0.10 + ((pass_num + 1) / passes) * 0.75
 
-                n_in = len(list(Path(current_in).glob("*.png")))
-                expected_out = max(1, 2 * n_in - 1)
+            n_in = len(list(Path(current_in).glob("*.png")))
+            expected_out = max(1, 2 * n_in - 1)
 
-                log(f"RIFE pass {pass_num + 1}/{passes}  ({n_in} frames → ~{expected_out} frames)...")
-                interpolate_rife(
-                    input_dir=current_in,
-                    output_dir=pass_out,
-                    rife_bin=rife_bin,
-                    model_path=model_path,
-                    uhd=uhd,
-                    log_callback=log_callback,
-                    progress_callback=_stage_cb(pass_start, pass_end),
-                    expected_output_frames=expected_out,
-                    cancel_check=cancel_check,
-                )
-                if cancelled():
-                    return output_path
+            log(f"RIFE pass {pass_num + 1}/{passes}  ({n_in} frames → ~{expected_out} frames)...")
+            interpolate_rife(
+                input_dir=current_in,
+                output_dir=pass_out,
+                rife_bin=rife_bin,
+                model_path=model_path,
+                uhd=uhd,
+                log_callback=log_callback,
+                progress_callback=_stage_cb(pass_start, pass_end),
+                expected_output_frames=expected_out,
+                cancel_check=cancel_check,
+            )
+            if cancelled():
+                return output_path
 
-                current_in = pass_out
-                current_fps *= 2
-                log(f"  Pass {pass_num + 1} done.")
+            current_in = pass_out
+            current_fps *= 2
+            log(f"  Pass {pass_num + 1} done.")
 
-            frames_final_dir = current_in
-            # Compute exact frame rate from actual frame count and video duration
-            actual_frames = len(list(Path(frames_final_dir).glob("*.png")))
-            final_frame_rate = actual_frames / duration if duration > 0 else current_fps
+        frames_final_dir = current_in
+        # Compute exact frame rate from actual frame count and video duration
+        actual_frames = len(list(Path(frames_final_dir).glob("*.png")))
+        final_frame_rate = actual_frames / duration if duration > 0 else current_fps
 
         # ── 5. Encode frames ──────────────────────────────────────────────
         encode_target = video_no_audio if has_audio else output_path
