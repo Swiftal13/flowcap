@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
         self._input_path: str | None = None
         self._worker: ConvertWorker | None = None
         self._thread: QThread | None = None
+        self._height_before_log: int = 0
 
         self._load_stylesheet()
         self._build_ui()
@@ -451,8 +452,9 @@ class MainWindow(QMainWindow):
         if self._log.isVisible():
             self._log.hide()
             self._details_btn.setText("Details ▾")
-            self.resize(self.width(), self.height() - _LOG_SECTION_H)
+            self.resize(self.width(), self._height_before_log)
         else:
+            self._height_before_log = self.height()
             self._log.show()
             self._details_btn.setText("Details ▲")
             self.resize(self.width(), self.height() + _LOG_SECTION_H)
