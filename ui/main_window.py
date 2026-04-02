@@ -318,7 +318,7 @@ class MainWindow(QMainWindow):
         self._log_message(f"Loaded: {path}")
         self._drop_zone.setText(f"✓  {Path(path).name}")
         self._preview_widget.show()
-        self.adjustSize()
+        self._fit_height()
 
         # Probe
         try:
@@ -445,7 +445,11 @@ class MainWindow(QMainWindow):
         else:
             self._log.show()
             self._details_btn.setText("Details ▲")
-        self.adjustSize()
+        self._fit_height()
+
+    def _fit_height(self):
+        self.centralWidget().adjustSize()
+        self.resize(self.width(), self.centralWidget().sizeHint().height())
 
     def _log_message(self, msg: str):
         self._log.append(msg)
