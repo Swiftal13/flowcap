@@ -85,6 +85,7 @@ class DropZone(QWidget):
             "Drop a video here  ·  or click to browse\nMP4  ·  MOV  ·  MKV  ·  AVI"
         )
         self._idle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._idle_label.setStyleSheet("color: #444; font-size: 13px; background: transparent; border: none;")
         self._idle_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         # ── Loaded state ─────────────────────────────────────────────────
@@ -104,9 +105,11 @@ class DropZone(QWidget):
 
         self._change_hint = QLabel("Click to change file")
         self._change_hint.setObjectName("infoLabel")
+        self._change_hint.setStyleSheet("background: transparent; border: none;")
         self._change_hint.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         info_col = QWidget()
+        info_col.setStyleSheet("background: transparent;")
         info_col.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         info_col_layout = QVBoxLayout(info_col)
         info_col_layout.setSpacing(6)
@@ -117,6 +120,7 @@ class DropZone(QWidget):
         info_col_layout.addWidget(self._change_hint)
 
         self._loaded_row = QWidget()
+        self._loaded_row.setStyleSheet("background: transparent;")
         self._loaded_row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         loaded_layout = QHBoxLayout(self._loaded_row)
         loaded_layout.setSpacing(20)
