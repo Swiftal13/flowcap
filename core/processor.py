@@ -63,13 +63,13 @@ def process_video(
     )
 
     # ── RIFE pass strategy ────────────────────────────────────────────────
-    # Always extract at the original fps and do exactly 1 RIFE pass to double
-    # the frame count. FFmpeg then resamples to output_fps.
-    # This ensures RIFE only synthesises 1 frame between adjacent originals —
-    # the frames are close together so motion estimation is accurate and clean.
-    # Doing multiple passes with sub-sampled input creates warping artifacts.
-    passes = 1
-    extract_fps = input_fps  # extract at original fps, no downsampling
+    # Extract at original fps. Each RIFE pass doubles the frame count by
+    # synthesising 1 frame between adjacent frames. Because each pass works
+    # on already-doubled frames, frames are always temporally close — no warping.
+    #   balanced → 2 passes: input → 2× → 4× → FFmpeg resample to 60fps
+    #   high     → 3 passes: input → 2× → 4× → 8× → FFmpeg resample to 60fps
+    passes = 3 if quality == QUALITY_HIGH else 2
+    extract_fps = input_fps  # always extract at original fps
 
     total_input_frames = max(1, int(round(duration * extract_fps)))
     total_output_frames = max(1, int(round(duration * output_fps)))
