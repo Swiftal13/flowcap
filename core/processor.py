@@ -63,21 +63,21 @@ def process_video(
     )
 
     # ── How many RIFE passes? ─────────────────────────────────────────────
-    # Each pass doubles the frame count. Keep doubling until we reach output_fps.
-    passes = 0
+    # Each pass doubles the frame count. Always at least 1 pass so RIFE
+    # runs even for high-fps input (e.g. 99fps → extract at 30fps → RIFE → 60fps).
+    passes = 1
     rife_fps = input_fps
-    while rife_fps < output_fps * 0.99:
-        rife_fps *= 2
+    while rife_fps * (2 ** passes) < output_fps * 0.99:
         passes += 1
         if passes >= 3:
             break
 
-    if passes == 0:
-        log(f"  Input is already >= {output_fps:.0f} fps — re-encoding only.")
+    # The fps we extract frames at — RIFE will double it `passes` times to reach output_fps
+    extract_fps = output_fps / (2 ** passes)
 
-    total_input_frames = max(1, int(round(duration * input_fps)))
+    total_input_frames = max(1, int(round(duration * extract_fps)))
     total_output_frames = max(1, int(round(duration * output_fps)))
-    log(f"  RIFE passes: {passes}   intermediate fps: {rife_fps:.0f}")
+    log(f"  Extract at: {extract_fps:.2f} fps   RIFE passes: {passes}   → {output_fps:.0f} fps")
     log(f"  Expected output: ~{total_output_frames} frames @ {output_fps:.0f} fps")
 
     # ── RIFE binary ───────────────────────────────────────────────────────
@@ -121,9 +121,10 @@ def process_video(
             return output_path
 
         # ── 3. Extract frames ─────────────────────────────────────────────
-        log("Extracting frames from video...")
+        log(f"Extracting frames at {extract_fps:.2f} fps...")
         n_frames = extract_frames(
             input_path, frames_in_dir,
+            target_fps=extract_fps,
             log_callback=log_callback,
             progress_callback=_stage_cb(0.0, 0.10),
             total_frames=total_input_frames,
@@ -133,14 +134,9 @@ def process_video(
             return output_path
         log(f"  Extracted {n_frames} frames.")
 
-        if passes == 0:
-            # No interpolation needed — just re-encode at output fps
-            frames_final_dir = frames_in_dir
-            final_frame_rate = input_fps
-        else:
-            # ── 4. RIFE interpolation passes ─────────────────────────────
-            current_in = frames_in_dir
-            current_fps = input_fps
+        # ── 4. RIFE interpolation passes ─────────────────────────────────
+        current_in = frames_in_dir
+        current_fps = extract_fps
 
             for pass_num in range(passes):
                 pass_out = os.path.join(tmpdir, f"rife_pass{pass_num + 1}")

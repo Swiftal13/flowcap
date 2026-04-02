@@ -282,14 +282,16 @@ def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -
 def extract_frames(
     input_path: str,
     output_dir: str,
+    target_fps: float | None = None,
     log_callback=None,
     progress_callback=None,
     total_frames: int = 0,
     cancel_check=None,
 ) -> int:
     """
-    Extract every frame from input_path as 0-indexed PNG images into output_dir.
-    Uses -start_number 0 so output matches RIFE's own naming convention.
+    Extract frames from input_path as 0-indexed PNG images into output_dir.
+    If target_fps is given, resamples to that rate during extraction
+    (e.g. downsample 99fps to 30fps before RIFE doubles it to 60fps).
     Returns the number of frames extracted.
     """
     ffmpeg, _ = find_ffmpeg()
@@ -297,13 +299,15 @@ def extract_frames(
         raise RuntimeError("ffmpeg not found.")
 
     pattern = os.path.join(output_dir, "%08d.png")
+    vf = f"fps={target_fps}" if target_fps else None
     cmd = [
         ffmpeg, "-y",
         "-i", input_path,
-        "-vsync", "cfr",      # constant frame rate — no duplicate/dropped frames
         "-start_number", "0",
-        pattern,
     ]
+    if vf:
+        cmd += ["-vf", vf]
+    cmd.append(pattern)
 
     proc = subprocess.Popen(
         cmd,
