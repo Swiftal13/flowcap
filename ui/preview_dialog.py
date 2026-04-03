@@ -127,7 +127,7 @@ class VideoPane(QWidget):
 class PreviewDialog(QDialog):
     def __init__(self, parent, input_path: str, output_path: str):
         super().__init__(parent)
-        self.setWindowTitle("Before / After")
+        self.setWindowTitle("Preview")
         self.setModal(True)
         self.setFixedSize(780, 440)
         self._input_path = input_path
@@ -147,11 +147,6 @@ class PreviewDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
-
-        # Title
-        title = QLabel("Before / After")
-        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #e0e0e0;")
-        layout.addWidget(title)
 
         # Video panes
         pane_row = QHBoxLayout()
