@@ -442,12 +442,32 @@ def encode_frames(
     start_number = int(pngs[0].stem)
     pattern = os.path.join(frames_dir, "%08d.png")
 
+    # When RIFE has multiplied frames well above output_fps, blend multiple
+    # intermediate frames into each output frame (temporal average) instead of
+    # just picking every Nth frame. This converts the RIFE super-sample into
+    # smooth motion rather than discarding the extra frames.
+    blend_factor = max(1, round(frame_rate / output_fps))
+    if blend_factor >= 2:
+        weights = " ".join(["1"] * blend_factor)
+        vf = (
+            f"tmix=frames={blend_factor}:weights='{weights}',"
+            f"fps={int(output_fps)}"
+        )
+    else:
+        vf = f"fps={int(output_fps)}"
+
+    if log_callback:
+        log_callback(
+            f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
+            f"(blend_factor={blend_factor})"
+        )
+
     cmd = [
         ffmpeg, "-y",
         "-framerate", str(frame_rate),
         "-start_number", str(start_number),
         "-i", pattern,
-        "-vf", f"fps={int(output_fps)}",
+        "-vf", vf,
         "-c:v", "libx264",
         "-crf", "18",
         "-pix_fmt", "yuv420p",
