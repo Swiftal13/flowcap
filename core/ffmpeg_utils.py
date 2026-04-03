@@ -4,11 +4,18 @@ FFmpeg utility functions for FlowCap.
 
 import re
 import subprocess
+import sys
 import json
 import os
 import shutil
 import math
 from pathlib import Path
+
+# Suppress console windows for subprocesses on Windows
+_HIDE = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW}
+    if sys.platform == "win32" else {}
+)
 
 
 def find_ffmpeg() -> tuple[str | None, str | None]:
@@ -49,7 +56,7 @@ def probe_video(input_path: str) -> dict:
         "-show_streams", "-show_format",
         input_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, **_HIDE)
     data = json.loads(result.stdout)
 
     video_stream = None
@@ -182,6 +189,7 @@ def interpolate_video(
         stdout=subprocess.DEVNULL,
         text=True,
         bufsize=0,
+        **_HIDE,
     )
 
     # FFmpeg's frame= counter tracks output frames (after the full filter chain),
@@ -238,7 +246,7 @@ def extract_audio(input_path: str, audio_path: str) -> bool:
 
     proc = subprocess.run(
         [ffmpeg, "-y", "-i", input_path, "-vn", "-acodec", "copy", audio_path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, **_HIDE,
     )
     return proc.returncode == 0 and os.path.exists(audio_path) and os.path.getsize(audio_path) > 0
 
@@ -260,7 +268,7 @@ def mux_audio(video_path: str, audio_path: str, output_path: str) -> None:
             "-movflags", "+faststart",
             output_path,
         ],
-        capture_output=True, text=True,
+        capture_output=True, text=True, **_HIDE,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"FFmpeg mux failed:\n{proc.stderr[-800:]}")
@@ -283,7 +291,7 @@ def detect_scene_cuts(input_path: str, threshold: float = 0.4) -> list[float]:
         "-an", "-f", "null", "-",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, **_HIDE)
     except Exception:
         return []
 
@@ -307,7 +315,7 @@ def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -
     proc = subprocess.run(
         [ffmpeg, "-y", "-ss", str(time), "-i", input_path,
          "-vframes", "1", "-q:v", "2", thumbnail_path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, **_HIDE,
     )
     return proc.returncode == 0 and os.path.exists(thumbnail_path)
 
@@ -327,7 +335,7 @@ def concat_videos(video_paths: list[str], output_path: str) -> None:
         proc = subprocess.run(
             [ffmpeg, "-y", "-f", "concat", "-safe", "0",
              "-i", concat_txt, "-c", "copy", output_path],
-            capture_output=True, text=True,
+            capture_output=True, text=True, **_HIDE,
         )
         if proc.returncode != 0:
             raise RuntimeError(f"FFmpeg concat failed:\n{proc.stderr[-800:]}")
@@ -375,6 +383,7 @@ def extract_frames(
         stdout=subprocess.DEVNULL,
         text=True,
         bufsize=0,
+        **_HIDE,
     )
 
     frame_re = re.compile(r"frame=\s*(\d+)")
@@ -482,6 +491,7 @@ def encode_frames(
         stdout=subprocess.DEVNULL,
         text=True,
         bufsize=0,
+        **_HIDE,
     )
 
     frame_re = re.compile(r"frame=\s*(\d+)")

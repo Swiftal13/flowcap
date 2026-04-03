@@ -6,9 +6,15 @@ NVIDIA, AMD, and Intel. Falls back to CPU if no Vulkan-capable GPU.
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
+
+_HIDE = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW}
+    if sys.platform == "win32" else {}
+)
 
 
 def find_rife() -> tuple[str | None, str | None]:
@@ -91,6 +97,7 @@ def interpolate_rife(
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        **_HIDE,
     )
 
     out_path = Path(output_dir)
