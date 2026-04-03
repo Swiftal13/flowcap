@@ -110,6 +110,28 @@ QPushButton:disabled {
     color: #3a3a60;
 }
 
+/* ── Cancel button ──────────────────────────────────────────────────── */
+#cancelBtn {
+    background-color: #2a1a1a;
+    color: #f87171;
+    border: 1px solid #4a2020;
+    border-radius: 8px;
+    padding: 11px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+#cancelBtn:hover {
+    background-color: #351f1f;
+    border-color: #6a2e2e;
+    color: #fca5a5;
+}
+
+#cancelBtn:pressed {
+    background-color: #1f1212;
+}
+
 /* ── Open folder button ─────────────────────────────────────────────── */
 #openFolderBtn {
     background-color: transparent;

@@ -529,8 +529,10 @@ class MainWindow(QMainWindow):
 
     def _on_fps_changed(self):
         if not self._converting and not self._post_convert:
-            fps = int(self._selected_fps())
-            self._convert_btn.setText(f"Convert to {fps}fps")
+            self._set_convert_btn(
+                f"Convert to {int(self._selected_fps())}fps",
+                enabled=self._input_path is not None,
+            )
 
     # ── File selection ────────────────────────────────────────────────────
 
@@ -571,8 +573,7 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.hide()
         self._progress_bar.setValue(0)
         self._status_label.setText("")
-        fps = int(self._selected_fps())
-        self._convert_btn.setText(f"Convert to {fps}fps")
+        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps", enabled=False)
 
         name = Path(path).name
         self._drop_zone.set_loaded(name, "Probing…")
@@ -668,9 +669,7 @@ class MainWindow(QMainWindow):
         if self._worker:
             self._worker.cancel()
         self._converting = False
-        fps = int(self._selected_fps())
-        self._convert_btn.setText(f"Convert to {fps}fps")
-        self._convert_btn.setEnabled(True)
+        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps")
         self._status_label.setText("Cancelled")
 
     def _reset(self):
@@ -682,9 +681,7 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.hide()
         self._progress_bar.setValue(0)
         self._status_label.setText("")
-        fps = int(self._selected_fps())
-        self._convert_btn.setText(f"Convert to {fps}fps")
-        self._convert_btn.setEnabled(False)
+        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps", enabled=False)
 
     def _start_conversion(self):
         if not self._input_path:
@@ -700,6 +697,8 @@ class MainWindow(QMainWindow):
         self._converting = True
         self._post_convert = False
         self._convert_btn.setText("Cancel")
+        self._convert_btn.setObjectName("cancelBtn")
+        self._convert_btn.setStyle(self._convert_btn.style())
         self._convert_btn.setEnabled(True)
         self._done_label.hide()
         self._preview_btn.hide()
@@ -765,8 +764,7 @@ class MainWindow(QMainWindow):
 
         self._progress_bar.setValue(self._progress_bar.maximum())
         self._status_label.setText("Done")
-        self._convert_btn.setText("Convert another")
-        self._convert_btn.setEnabled(True)
+        self._set_convert_btn("Convert another")
         self._drop_zone.set_success()
 
         # Auto-process next in queue
@@ -776,9 +774,7 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str):
         self._converting = False
         self._log_message(f"ERROR: {msg}")
-        fps = int(self._selected_fps())
-        self._convert_btn.setText(f"Convert to {fps}fps")
-        self._convert_btn.setEnabled(True)
+        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps")
         QMessageBox.critical(self, "Conversion Error", msg)
 
     # ── Output actions ────────────────────────────────────────────────────
@@ -801,6 +797,13 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     # ── Helpers ──────────────────────────────────────────────────────────
+
+    def _set_convert_btn(self, text: str, enabled: bool = True):
+        """Set convert button text and restore its blue convertBtn style."""
+        self._convert_btn.setObjectName("convertBtn")
+        self._convert_btn.setStyle(self._convert_btn.style())
+        self._convert_btn.setText(text)
+        self._convert_btn.setEnabled(enabled)
 
     def _toggle_log(self):
         visible = not self._log.isVisible()
