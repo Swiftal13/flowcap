@@ -11,13 +11,50 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
     QDialog, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSlider, QWidget,
+    QFrame,
 )
+
+from core.ffmpeg_utils import probe_video
+
+
+class StatsBadge(QWidget):
+    """Compact stats strip shown below a video pane."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(
+            "background-color: #111; border: 1px solid #1e1e1e; border-radius: 6px;"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(16)
+
+        self._labels: dict[str, QLabel] = {}
+        for key in ("fps", "res", "flow"):
+            lbl = QLabel("—")
+            lbl.setStyleSheet("color: #555; font-size: 11px; background: transparent; border: none;")
+            layout.addWidget(lbl)
+            self._labels[key] = lbl
+        layout.addStretch()
+
+    def set_stats(self, fps: float, width: int, height: int, flow: bool):
+        self._labels["fps"].setText(f"{fps:.3f} fps")
+        self._labels["res"].setText(f"{width}×{height}")
+        flow_html = (
+            '<span style="color:#34d399;">✦ optical flow</span>'
+            if flow else
+            '<span style="color:#444;">no optical flow</span>'
+        )
+        self._labels["flow"].setText(flow_html)
+        self._labels["flow"].setTextFormat(Qt.TextFormat.RichText)
 
 
 class VideoPane(QWidget):
-    """One labelled video player pane."""
+    """One labelled video player pane with stats."""
 
-    def __init__(self, label_text: str, parent=None):
+    def __init__(self, label_text: str, has_flow: bool, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
 
@@ -25,19 +62,36 @@ class VideoPane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
+        # Caption row: title + flow badge
+        caption_row = QHBoxLayout()
+        caption_row.setSpacing(8)
         caption = QLabel(label_text)
-        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        caption.setStyleSheet("color: #666; font-size: 11px; background: transparent;")
-        layout.addWidget(caption)
+        caption.setStyleSheet(
+            "color: #c0c0c0; font-size: 12px; font-weight: 600; background: transparent;"
+        )
+        caption_row.addWidget(caption)
+        if has_flow:
+            badge = QLabel("RIFE applied")
+            badge.setStyleSheet(
+                "color: #34d399; font-size: 10px; font-weight: 600;"
+                " background-color: #0d2a20; border: 1px solid #1e4d3a;"
+                " border-radius: 4px; padding: 1px 6px;"
+            )
+            caption_row.addWidget(badge)
+        caption_row.addStretch()
+        layout.addLayout(caption_row)
 
         self.video_widget = QVideoWidget()
-        self.video_widget.setMinimumSize(340, 220)
+        self.video_widget.setMinimumSize(340, 210)
         self.video_widget.setStyleSheet("background: #000; border-radius: 6px;")
         layout.addWidget(self.video_widget)
 
+        self.stats = StatsBadge()
+        layout.addWidget(self.stats)
+
         self.player = QMediaPlayer()
         self._audio = QAudioOutput()
-        self._audio.setVolume(0.0)  # muted — sync'd playback, no audio clash
+        self._audio.setVolume(0.0)
         self.player.setAudioOutput(self._audio)
         self.player.setVideoOutput(self.video_widget)
 
@@ -62,22 +116,29 @@ class VideoPane(QWidget):
     def set_volume(self, vol: float):
         self._audio.setVolume(vol)
 
+    def set_stats_from_probe(self, path: str, has_flow: bool):
+        try:
+            info = probe_video(path)
+            self.stats.set_stats(info["fps"], info["width"], info["height"], has_flow)
+        except Exception:
+            pass
+
 
 class PreviewDialog(QDialog):
     def __init__(self, parent, input_path: str, output_path: str):
         super().__init__(parent)
         self.setWindowTitle("Before / After")
         self.setModal(True)
-        self.setFixedSize(780, 380)
+        self.setFixedSize(780, 440)
         self._input_path = input_path
         self._output_path = output_path
         self._playing = False
-        self._syncing = False  # guard against recursive slider updates
+        self._syncing = False
 
         self._build_ui()
         self._load_videos()
+        self._load_stats()
 
-        # Sync timer — keep both players at same position
         self._sync_timer = QTimer(self)
         self._sync_timer.setInterval(200)
         self._sync_timer.timeout.connect(self._sync_position)
@@ -95,9 +156,8 @@ class PreviewDialog(QDialog):
         # Video panes
         pane_row = QHBoxLayout()
         pane_row.setSpacing(12)
-        self._before = VideoPane("Original")
-        self._after = VideoPane("Converted")
-        # Give converted audio at normal volume
+        self._before = VideoPane("Original", has_flow=False)
+        self._after = VideoPane("Converted", has_flow=True)
         self._after.set_volume(0.8)
         pane_row.addWidget(self._before)
         pane_row.addWidget(self._after)
@@ -152,6 +212,10 @@ class PreviewDialog(QDialog):
             self._before.load(self._input_path)
         if os.path.exists(self._output_path):
             self._after.load(self._output_path)
+
+    def _load_stats(self):
+        self._before.set_stats_from_probe(self._input_path, has_flow=False)
+        self._after.set_stats_from_probe(self._output_path, has_flow=True)
 
     def _toggle_play(self):
         if self._playing:
