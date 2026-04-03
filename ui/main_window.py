@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QObject, QUrl, QTimer,
 )
-from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QCursor
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QProgressBar, QTextEdit, QFileDialog,
@@ -78,6 +78,55 @@ class ConvertWorker(QObject):
                 self.finished.emit(output_path)
         except Exception as exc:
             self.error.emit(str(exc))
+
+
+# ── Output Folder Picker ─────────────────────────────────────────────────────
+
+class OutputFolderPicker(QWidget):
+    """
+    Pill-shaped clickable widget that shows the current output folder.
+    The whole pill is the button — no separate Change button needed.
+    """
+    clicked = pyqtSignal()
+
+    _DEFAULT = "Same folder as input"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("outputPicker")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(34)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 10, 0)
+        layout.setSpacing(8)
+
+        self._folder_icon = QLabel("⌂")
+        self._folder_icon.setObjectName("pickerIcon")
+        self._folder_icon.setFixedWidth(14)
+
+        self._path_lbl = QLabel(self._DEFAULT)
+        self._path_lbl.setObjectName("pickerPath")
+        self._path_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self._edit_hint = QLabel("change")
+        self._edit_hint.setObjectName("pickerHint")
+
+        layout.addWidget(self._folder_icon)
+        layout.addWidget(self._path_lbl)
+        layout.addWidget(self._edit_hint)
+
+    def set_path(self, folder: str | None):
+        if folder:
+            self._path_lbl.setText(Path(folder).name)
+            self._path_lbl.setToolTip(folder)
+        else:
+            self._path_lbl.setText(self._DEFAULT)
+            self._path_lbl.setToolTip("")
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
 
 
 # ── Drop Zone ────────────────────────────────────────────────────────────────
@@ -312,23 +361,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._queue_list)
         layout.addSpacing(10)
 
-        # ── Output folder row ─────────────────────────────────────────────
-        output_row = QHBoxLayout()
-        output_row.setSpacing(8)
-        output_lbl = QLabel("Save to")
-        output_lbl.setObjectName("sectionLabel")
-        self._output_dir_label = QLabel("Same folder as input")
-        self._output_dir_label.setObjectName("infoLabel")
-        self._output_dir_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        self._change_output_btn = QPushButton("Change")
-        self._change_output_btn.setFixedWidth(80)
-        self._change_output_btn.clicked.connect(self._browse_output_dir)
-        output_row.addWidget(output_lbl)
-        output_row.addWidget(self._output_dir_label)
-        output_row.addWidget(self._change_output_btn)
-        layout.addLayout(output_row)
+        # ── Output folder picker ──────────────────────────────────────────
+        self._output_picker = OutputFolderPicker()
+        self._output_picker.clicked.connect(self._browse_output_dir)
+        layout.addWidget(self._output_picker)
         layout.addSpacing(10)
 
         # ── Options row ───────────────────────────────────────────────────
@@ -541,8 +577,9 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Choose Output Folder", "")
         if folder:
             self._output_dir = folder
-            self._output_dir_label.setText(Path(folder).name)
-            self._output_dir_label.setToolTip(folder)
+        else:
+            self._output_dir = None
+        self._output_picker.set_path(self._output_dir)
 
     def _get_output_path(self) -> str:
         p = Path(self._input_path)

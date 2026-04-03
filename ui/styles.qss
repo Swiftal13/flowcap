@@ -280,6 +280,47 @@ QLabel#creditLabel:hover {
     color: #666;
 }
 
+/* ── Output folder picker ───────────────────────────────────────────── */
+#outputPicker {
+    background-color: #141414;
+    border: 1px solid #222;
+    border-radius: 8px;
+}
+
+#outputPicker:hover {
+    background-color: #1a1a1a;
+    border-color: #383838;
+}
+
+#outputPicker QLabel#pickerIcon {
+    color: #3a3a3a;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+}
+
+#outputPicker QLabel#pickerPath {
+    color: #666;
+    font-size: 12px;
+    background: transparent;
+    border: none;
+}
+
+#outputPicker:hover QLabel#pickerPath {
+    color: #999;
+}
+
+#outputPicker QLabel#pickerHint {
+    color: #2e2e2e;
+    font-size: 11px;
+    background: transparent;
+    border: none;
+}
+
+#outputPicker:hover QLabel#pickerHint {
+    color: #555;
+}
+
 /* ── Queue list ─────────────────────────────────────────────────────── */
 QListWidget#queueList {
     background-color: #111;
