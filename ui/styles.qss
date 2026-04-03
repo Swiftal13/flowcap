@@ -89,7 +89,7 @@ QPushButton:disabled {
 #convertBtn {
     background-color: #111;
     color: #fff;
-    border: 2px solid #34d399;
+    border: 1px solid #34d399;
     border-radius: 8px;
     padding: 11px 20px;
     font-size: 13px;
@@ -110,7 +110,7 @@ QPushButton:disabled {
 #convertBtn:disabled {
     background-color: #111;
     color: #fff;
-    border: 2px solid #f87171;
+    border: 1px solid #f87171;
 }
 
 /* ── Cancel button ──────────────────────────────────────────────────── */
