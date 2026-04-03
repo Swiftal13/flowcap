@@ -266,6 +266,39 @@ def mux_audio(video_path: str, audio_path: str, output_path: str) -> None:
         raise RuntimeError(f"FFmpeg mux failed:\n{proc.stderr[-800:]}")
 
 
+def detect_scene_cuts(input_path: str, threshold: float = 0.4) -> list[float]:
+    """
+    Return a list of timestamps (seconds) where hard scene cuts occur.
+    Uses ffmpeg's select+showinfo filter to score each frame.
+    threshold: scene score above which a cut is declared (0.0–1.0, default 0.4)
+    Returns [] if no cuts found or on error.
+    """
+    ffmpeg, _ = find_ffmpeg()
+    if not ffmpeg:
+        return []
+
+    cmd = [
+        ffmpeg, "-i", input_path,
+        "-vf", f"select=gt(scene\\,{threshold}),showinfo",
+        "-an", "-f", "null", "-",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except Exception:
+        return []
+
+    cuts: list[float] = []
+    pts_re = re.compile(r"pts_time:([0-9]+\.?[0-9]*)")
+    for line in result.stderr.splitlines():
+        if "Parsed_showinfo" in line:
+            m = pts_re.search(line)
+            if m:
+                t = float(m.group(1))
+                if t > 0.5:  # ignore cuts too near the start
+                    cuts.append(t)
+    return cuts
+
+
 def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -> bool:
     """Extract a single JPEG frame at `time` seconds."""
     ffmpeg, _ = find_ffmpeg()
@@ -279,10 +312,36 @@ def extract_thumbnail(input_path: str, thumbnail_path: str, time: float = 0.0) -
     return proc.returncode == 0 and os.path.exists(thumbnail_path)
 
 
+def concat_videos(video_paths: list[str], output_path: str) -> None:
+    """Concatenate multiple videos using the concat demuxer (stream copy)."""
+    import tempfile as _tempfile
+    ffmpeg, _ = find_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found.")
+
+    concat_txt = _tempfile.mktemp(suffix=".txt")
+    try:
+        with open(concat_txt, "w") as f:
+            for vp in video_paths:
+                f.write(f"file '{vp}'\n")
+        proc = subprocess.run(
+            [ffmpeg, "-y", "-f", "concat", "-safe", "0",
+             "-i", concat_txt, "-c", "copy", output_path],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"FFmpeg concat failed:\n{proc.stderr[-800:]}")
+    finally:
+        if os.path.exists(concat_txt):
+            os.remove(concat_txt)
+
+
 def extract_frames(
     input_path: str,
     output_dir: str,
     target_fps: float | None = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
     log_callback=None,
     progress_callback=None,
     total_frames: int = 0,
@@ -290,8 +349,8 @@ def extract_frames(
 ) -> int:
     """
     Extract frames from input_path as 0-indexed PNG images into output_dir.
-    If target_fps is given, resamples to that rate during extraction
-    (e.g. downsample 99fps to 30fps before RIFE doubles it to 60fps).
+    If target_fps is given, resamples to that rate during extraction.
+    If start_time/end_time are given, only extracts that range (accurate seek).
     Returns the number of frames extracted.
     """
     ffmpeg, _ = find_ffmpeg()
@@ -300,11 +359,12 @@ def extract_frames(
 
     pattern = os.path.join(output_dir, "%08d.png")
     vf = f"fps={target_fps}" if target_fps else None
-    cmd = [
-        ffmpeg, "-y",
-        "-i", input_path,
-        "-start_number", "0",
-    ]
+    cmd = [ffmpeg, "-y", "-i", input_path]
+    if start_time is not None:
+        cmd += ["-ss", str(start_time)]
+    if end_time is not None:
+        cmd += ["-to", str(end_time)]
+    cmd += ["-start_number", "0"]
     if vf:
         cmd += ["-vf", vf]
     cmd.append(pattern)

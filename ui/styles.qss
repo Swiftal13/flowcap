@@ -280,6 +280,50 @@ QLabel#creditLabel:hover {
     color: #666;
 }
 
+/* ── Queue list ─────────────────────────────────────────────────────── */
+QListWidget#queueList {
+    background-color: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 6px;
+    color: #666;
+    font-size: 11px;
+    outline: none;
+}
+
+QListWidget#queueList::item {
+    padding: 4px 10px;
+    border-bottom: 1px solid #181818;
+}
+
+QListWidget#queueList::item:selected {
+    background-color: #1c1c2e;
+    color: #999;
+}
+
+/* ── Scene cut checkbox ─────────────────────────────────────────────── */
+QCheckBox#sceneCheck {
+    color: #666;
+    font-size: 12px;
+    spacing: 6px;
+}
+
+QCheckBox#sceneCheck::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    background-color: #1a1a1a;
+}
+
+QCheckBox#sceneCheck::indicator:checked {
+    background-color: #5c5ff0;
+    border-color: #5c5ff0;
+}
+
+QCheckBox#sceneCheck:hover {
+    color: #999;
+}
+
 /* ── Tooltip ────────────────────────────────────────────────────────── */
 QToolTip {
     background-color: #1e1e1e;
