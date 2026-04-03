@@ -3,6 +3,12 @@ name: Build Windows EXE
 on:
   release:
     types: [created]   # triggers when you publish a new release on GitHub
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload artifact to (e.g. v2.1.0)"
+        required: true
+        default: "v2.1.0"
 
 permissions:
   contents: write
@@ -38,4 +44,5 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/FlowCap-Windows.zip
