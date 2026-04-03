@@ -87,9 +87,9 @@ QPushButton:disabled {
 
 /* ── Convert / primary action button ───────────────────────────────── */
 #convertBtn {
-    background-color: #5c5ff0;
+    background-color: #111;
     color: #fff;
-    border: none;
+    border: 2px solid #34d399;
     border-radius: 8px;
     padding: 11px 20px;
     font-size: 13px;
@@ -98,17 +98,19 @@ QPushButton:disabled {
 }
 
 #convertBtn:hover {
-    background-color: #6e71f5;
+    background-color: #0d2a20;
+    border-color: #4eeaac;
 }
 
 #convertBtn:pressed {
-    background-color: #4a4dd4;
+    background-color: #0a1f17;
+    border-color: #34d399;
 }
 
 #convertBtn:disabled {
-    background-color: #1a1a2e;
-    color: #4a4a80;
-    border: 1px solid #2a2a50;
+    background-color: #111;
+    color: #fff;
+    border: 2px solid #f87171;
 }
 
 /* ── Cancel button ──────────────────────────────────────────────────── */
