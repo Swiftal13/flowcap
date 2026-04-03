@@ -75,8 +75,9 @@ class VideoPane(QWidget):
             badge.setStyleSheet(
                 "color: #34d399; font-size: 10px; font-weight: 600;"
                 " background-color: #0d2a20; border: 1px solid #1e4d3a;"
-                " border-radius: 4px; padding: 1px 6px;"
+                " border-radius: 4px; padding: 0px 5px;"
             )
+            badge.setFixedHeight(caption.sizeHint().height())
             caption_row.addWidget(badge)
         caption_row.addStretch()
         layout.addLayout(caption_row)
