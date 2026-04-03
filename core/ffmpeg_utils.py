@@ -447,80 +447,90 @@ def encode_frames(
     if not pngs:
         raise RuntimeError(f"No PNG frames found in {frames_dir}")
 
-    # Determine start number (RIFE outputs 0-indexed, extract also 0-indexed)
-    start_number = int(pngs[0].stem)
-    pattern = os.path.join(frames_dir, "%08d.png")
+    if log_callback and len(pngs) != max(int(pngs[-1].stem) - int(pngs[0].stem) + 1, len(pngs)):
+        log_callback(f"  Warning: {max(int(pngs[-1].stem) - int(pngs[0].stem) + 1, 0) - len(pngs)} frames missing from RIFE output — encoding available frames.")
 
-    # When RIFE has multiplied frames well above output_fps, blend multiple
-    # intermediate frames into each output frame (temporal average) instead of
-    # just picking every Nth frame. This converts the RIFE super-sample into
-    # smooth motion rather than discarding the extra frames.
-    blend_factor = max(1, round(frame_rate / output_fps))
-    if blend_factor >= 2:
-        weights = " ".join(["1"] * blend_factor)
-        vf = (
-            f"tmix=frames={blend_factor}:weights='{weights}',"
-            f"fps={int(output_fps)}"
-        )
-    else:
-        vf = f"fps={int(output_fps)}"
+    # Build a concat list from only the frames that actually exist.
+    # This avoids FFmpeg crashing on gaps caused by RIFE encode failures.
+    import tempfile as _tmp
+    concat_file = _tmp.mktemp(suffix=".txt")
+    try:
+        with open(concat_file, "w") as cf:
+            for p in pngs:
+                cf.write(f"file '{str(p)}'\n"
+                         f"duration {1.0 / frame_rate}\n")
 
-    if log_callback:
-        log_callback(
-            f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
-            f"(blend_factor={blend_factor})"
-        )
-
-    cmd = [
-        ffmpeg, "-y",
-        "-framerate", str(frame_rate),
-        "-start_number", str(start_number),
-        "-i", pattern,
-        "-vf", vf,
-        "-c:v", "libx264",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-preset", "fast",
-        "-movflags", "+faststart",
-        output_path,
-    ]
-
-    proc = subprocess.Popen(
-        cmd,
-        stderr=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        text=True,
-        bufsize=0,
-        **_HIDE,
-    )
-
-    frame_re = re.compile(r"frame=\s*(\d+)")
-    buf = ""
-    last_logged_pct = -1
-
-    while True:
-        ch = proc.stderr.read(1)
-        if not ch:
-            break
-        if cancel_check and cancel_check():
-            proc.terminate()
-            proc.wait()
-            return
-        if ch in ("\r", "\n"):
-            m = frame_re.search(buf)
-            if m and total_frames > 0:
-                current = int(m.group(1))
-                if progress_callback:
-                    progress_callback(min(current, total_frames), total_frames)
-                if log_callback:
-                    pct = int(100 * current / total_frames)
-                    if pct >= last_logged_pct + 5:
-                        last_logged_pct = pct
-                        log_callback(f"  Encoding: {pct}%  (frame {current} / {total_frames})")
-            buf = ""
+        # When RIFE has multiplied frames well above output_fps, blend multiple
+        # intermediate frames into each output frame (temporal average) instead of
+        # just picking every Nth frame.
+        blend_factor = max(1, round(frame_rate / output_fps))
+        if blend_factor >= 2:
+            weights = " ".join(["1"] * blend_factor)
+            vf = (
+                f"tmix=frames={blend_factor}:weights='{weights}',"
+                f"fps={int(output_fps)}"
+            )
         else:
-            buf += ch
+            vf = f"fps={int(output_fps)}"
 
-    proc.wait()
-    if proc.returncode not in (0, None):
-        raise RuntimeError(f"FFmpeg encoding failed (exit {proc.returncode})")
+        if log_callback:
+            log_callback(
+                f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
+                f"(blend_factor={blend_factor}, frames={len(pngs)})"
+            )
+
+        cmd = [
+            ffmpeg, "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", concat_file,
+            "-vf", vf,
+            "-c:v", "libx264",
+            "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-preset", "fast",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+
+        proc = subprocess.Popen(
+            cmd,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            text=True,
+            bufsize=0,
+            **_HIDE,
+        )
+
+        frame_re = re.compile(r"frame=\s*(\d+)")
+        buf = ""
+        last_logged_pct = -1
+
+        while True:
+            ch = proc.stderr.read(1)
+            if not ch:
+                break
+            if cancel_check and cancel_check():
+                proc.terminate()
+                proc.wait()
+                return
+            if ch in ("\r", "\n"):
+                m = frame_re.search(buf)
+                if m and total_frames > 0:
+                    current = int(m.group(1))
+                    if progress_callback:
+                        progress_callback(min(current, total_frames), total_frames)
+                    if log_callback:
+                        pct = int(100 * current / total_frames)
+                        if pct >= last_logged_pct + 5:
+                            last_logged_pct = pct
+                            log_callback(f"  Encoding: {pct}%  (frame {current} / {total_frames})")
+                buf = ""
+            else:
+                buf += ch
+
+        proc.wait()
+        if proc.returncode not in (0, None):
+            raise RuntimeError(f"FFmpeg encoding failed (exit {proc.returncode})")
+    finally:
+        if os.path.exists(concat_file):
+            os.remove(concat_file)
