@@ -91,7 +91,7 @@ QPushButton:disabled {
     color: #fff;
     border: none;
     border-radius: 8px;
-    padding: 9px 20px;
+    padding: 11px 20px;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.3px;

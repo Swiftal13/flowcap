@@ -28,10 +28,10 @@ SUPPORTED_EXTS = {".mp4", ".mov", ".mkv", ".avi"}
 
 # Fixed window heights: (queue_visible, log_visible)
 _WIN_H = {
-    (False, False): 464,
-    (True,  False): 564,
-    (False, True):  582,
-    (True,  True):  682,
+    (False, False): 490,
+    (True,  False): 590,
+    (False, True):  608,
+    (True,  True):  708,
 }
 
 
@@ -320,7 +320,7 @@ class MainWindow(QMainWindow):
         header_row.addWidget(subtitle)
         header_row.setAlignment(subtitle, Qt.AlignmentFlag.AlignVCenter)
         layout.addLayout(header_row)
-        layout.addSpacing(20)
+        layout.addSpacing(24)
 
         # ── FFmpeg warning ───────────────────────────────────────────────
         self._ffmpeg_warn = QLabel()
@@ -330,12 +330,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._ffmpeg_warn)
 
         # ── Drop zone ────────────────────────────────────────────────────
-        layout.addSpacing(12)
         self._drop_zone = DropZone()
         self._drop_zone.files_dropped.connect(self._on_files_dropped)
         self._drop_zone.clicked.connect(self._browse_file)
         layout.addWidget(self._drop_zone)
-        layout.addSpacing(10)
+        layout.addSpacing(20)
 
         # ── Queue list (hidden when empty) ───────────────────────────────
         queue_header = QHBoxLayout()
@@ -365,7 +364,7 @@ class MainWindow(QMainWindow):
         self._output_picker = OutputFolderPicker()
         self._output_picker.clicked.connect(self._browse_output_dir)
         layout.addWidget(self._output_picker)
-        layout.addSpacing(10)
+        layout.addSpacing(18)
 
         # ── Options row ───────────────────────────────────────────────────
         options_row = QHBoxLayout()
@@ -395,14 +394,14 @@ class MainWindow(QMainWindow):
 
         options_row.addWidget(quality_label)
         options_row.addWidget(self._quality_combo)
-        options_row.addSpacing(4)
+        options_row.addSpacing(8)
         options_row.addWidget(fps_label)
         options_row.addWidget(self._fps_combo)
-        options_row.addSpacing(4)
+        options_row.addSpacing(8)
         options_row.addWidget(self._scene_check)
         options_row.addStretch()
         layout.addLayout(options_row)
-        layout.addSpacing(8)
+        layout.addSpacing(16)
 
         # ── Convert button ────────────────────────────────────────────────
         self._convert_btn = QPushButton("Convert to 60fps")
@@ -410,7 +409,7 @@ class MainWindow(QMainWindow):
         self._convert_btn.setEnabled(False)
         self._convert_btn.clicked.connect(self._on_convert_clicked)
         layout.addWidget(self._convert_btn)
-        layout.addSpacing(12)
+        layout.addSpacing(16)
 
         # ── Progress bar ──────────────────────────────────────────────────
         self._progress_bar = QProgressBar()
@@ -418,7 +417,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setFixedHeight(4)
         layout.addWidget(self._progress_bar)
-        layout.addSpacing(6)
+        layout.addSpacing(10)
 
         # ── Status row ────────────────────────────────────────────────────
         status_row = QHBoxLayout()
