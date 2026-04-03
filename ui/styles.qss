@@ -106,8 +106,9 @@ QPushButton:disabled {
 }
 
 #convertBtn:disabled {
-    background-color: #1e1e38;
-    color: #3a3a60;
+    background-color: #1a1a2e;
+    color: #4a4a80;
+    border: 1px solid #2a2a50;
 }
 
 /* ── Cancel button ──────────────────────────────────────────────────── */
