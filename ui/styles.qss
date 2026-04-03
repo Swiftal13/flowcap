@@ -280,6 +280,36 @@ QLabel#creditLabel:hover {
     color: #666;
 }
 
+/* ── Log drawer handle ──────────────────────────────────────────────── */
+#logHandle {
+    background-color: #0c0c0c;
+    border-top: 1px solid #1a1a1a;
+}
+
+#logHandle:hover {
+    background-color: #141414;
+}
+
+#logHandle QLabel#logHandleChevron {
+    color: #2e2e2e;
+    font-size: 10px;
+    background: transparent;
+    border: none;
+}
+
+#logHandle QLabel#logHandleLabel {
+    color: #2e2e2e;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    background: transparent;
+    border: none;
+}
+
+#logHandle:hover QLabel#logHandleChevron,
+#logHandle:hover QLabel#logHandleLabel {
+    color: #555;
+}
+
 /* ── Output folder picker ───────────────────────────────────────────── */
 #outputPicker {
     background-color: #141414;

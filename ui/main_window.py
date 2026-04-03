@@ -80,6 +80,43 @@ class ConvertWorker(QObject):
             self.error.emit(str(exc))
 
 
+# ── Log Drawer Handle ────────────────────────────────────────────────────────
+
+class LogDrawerHandle(QWidget):
+    """
+    Full-width clickable strip at the bottom of the window.
+    Shows a centered chevron + 'Details' label — click to expand/collapse the log.
+    """
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("logHandle")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(22)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+
+        self._chevron = QLabel("▾")
+        self._chevron.setObjectName("logHandleChevron")
+        self._label = QLabel("Details")
+        self._label.setObjectName("logHandleLabel")
+
+        layout.addStretch()
+        layout.addWidget(self._chevron)
+        layout.addWidget(self._label)
+        layout.addStretch()
+
+    def set_open(self, open: bool):
+        self._chevron.setText("▲" if open else "▾")
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
 # ── Output Folder Picker ─────────────────────────────────────────────────────
 
 class OutputFolderPicker(QWidget):
@@ -296,9 +333,18 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
-        layout = QVBoxLayout(root)
-        layout.setContentsMargins(32, 26, 32, 20)
+        # Outer layout — zero margins so the log handle can go edge-to-edge
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Inner content with normal side margins
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(32, 26, 32, 0)
         layout.setSpacing(0)
+        outer.addWidget(content)
 
         # ── Header ───────────────────────────────────────────────────────
         header_row = QHBoxLayout()
@@ -444,20 +490,20 @@ class MainWindow(QMainWindow):
         self._open_folder_btn.clicked.connect(self._open_output_folder)
         status_row.addWidget(self._open_folder_btn)
 
-        self._details_btn = QPushButton("Details ▾")
-        self._details_btn.setFixedWidth(82)
-        self._details_btn.clicked.connect(self._toggle_log)
-        status_row.addWidget(self._details_btn)
         layout.addLayout(status_row)
-        layout.addSpacing(8)
+        layout.addSpacing(12)
 
-        # ── Log console ───────────────────────────────────────────────────
+        # ── Log drawer handle + console (edge-to-edge, in outer layout) ──
+        self._log_handle = LogDrawerHandle()
+        self._log_handle.clicked.connect(self._toggle_log)
+        outer.addWidget(self._log_handle)
+
         self._log = QTextEdit()
         self._log.setObjectName("logConsole")
         self._log.setReadOnly(True)
         self._log.setFixedHeight(110)
         self._log.hide()
-        layout.addWidget(self._log)
+        outer.addWidget(self._log)
 
     # ── FFmpeg check ─────────────────────────────────────────────────────
 
@@ -760,12 +806,9 @@ class MainWindow(QMainWindow):
     # ── Helpers ──────────────────────────────────────────────────────────
 
     def _toggle_log(self):
-        if self._log.isVisible():
-            self._log.hide()
-            self._details_btn.setText("Details ▾")
-        else:
-            self._log.show()
-            self._details_btn.setText("Details ▲")
+        visible = not self._log.isVisible()
+        self._log.setVisible(visible)
+        self._log_handle.set_open(visible)
         self._update_size()
 
     def _update_size(self):
