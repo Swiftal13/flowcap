@@ -62,8 +62,12 @@ class VideoPane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # Caption row: title + flow badge
-        caption_row = QHBoxLayout()
+        # Caption row — fixed height so both panes align identically
+        caption_widget = QWidget()
+        caption_widget.setFixedHeight(22)
+        caption_widget.setStyleSheet("background: transparent;")
+        caption_row = QHBoxLayout(caption_widget)
+        caption_row.setContentsMargins(0, 0, 0, 0)
         caption_row.setSpacing(8)
         caption = QLabel(label_text)
         caption.setStyleSheet(
@@ -77,10 +81,9 @@ class VideoPane(QWidget):
                 " background-color: #0d2a20; border: 1px solid #1e4d3a;"
                 " border-radius: 4px; padding: 0px 5px;"
             )
-            badge.setFixedHeight(caption.sizeHint().height())
             caption_row.addWidget(badge)
         caption_row.addStretch()
-        layout.addLayout(caption_row)
+        layout.addWidget(caption_widget)
 
         self.video_widget = QVideoWidget()
         self.video_widget.setFixedSize(350, 197)  # 16:9
