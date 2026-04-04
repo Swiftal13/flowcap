@@ -67,7 +67,16 @@ def process_video(
 
     # ── RIFE pass strategy ────────────────────────────────────────────────
     passes = 3 if quality == QUALITY_HIGH else 2
-    extract_fps = input_fps
+
+    # When input is already above output_fps, extract at output_fps so that
+    # RIFE passes double clean evenly-spaced frames and the final encode
+    # ratio is always a power-of-2 (e.g. 4× for 2 passes, 8× for 3 passes).
+    # This avoids non-integer downsampling ratios (e.g. 400fps→60fps = 6.67×)
+    # which cause alternating 6/7 frame gaps and subtle stutter.
+    if input_fps > output_fps * 1.05:
+        extract_fps = output_fps
+    else:
+        extract_fps = input_fps
 
     total_output_frames = max(1, int(round(duration * output_fps)))
     log(f"  Extract at: {extract_fps:.2f} fps   RIFE passes: {passes}   → {output_fps:.0f} fps")
