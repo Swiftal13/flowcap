@@ -25,6 +25,7 @@ from core.ffmpeg_utils import (
     encode_frames,
     concat_videos,
     detect_scene_cuts,
+    interpolate_video,
 )
 from core.rife_utils import find_rife, pick_model, interpolate_rife
 
@@ -65,34 +66,35 @@ def process_video(
         f"{duration:.2f}s  audio={'yes' if has_audio else 'no'}"
     )
 
-    # ── RIFE pass strategy ────────────────────────────────────────────────
-    passes = 3 if quality == QUALITY_HIGH else 2
-
-    # When input is already above output_fps, extract at output_fps so that
-    # RIFE passes double clean evenly-spaced frames and the final encode
-    # ratio is always a power-of-2 (e.g. 4× for 2 passes, 8× for 3 passes).
-    # This avoids non-integer downsampling ratios (e.g. 400fps→60fps = 6.67×)
-    # which cause alternating 6/7 frame gaps and subtle stutter.
-    if input_fps > output_fps * 1.05:
-        extract_fps = output_fps
-    else:
-        extract_fps = input_fps
+    # ── Route: minterpolate vs RIFE ───────────────────────────────────────
+    # RIFE synthesises new frames — ideal when input_fps < output_fps.
+    # minterpolate oversample+blend — ideal when input_fps >= output_fps
+    # (source already has enough frames; blend to exact output timestamps).
+    use_rife = input_fps < output_fps * 0.95
 
     total_output_frames = max(1, int(round(duration * output_fps)))
-    log(f"  Extract at: {extract_fps:.2f} fps   RIFE passes: {passes}   → {output_fps:.0f} fps")
+
+    if use_rife:
+        passes = 3 if quality == QUALITY_HIGH else 2
+        extract_fps = input_fps
+        log(f"  Mode: RIFE ({passes} passes)  {input_fps:.2f} fps → {output_fps:.0f} fps")
+    else:
+        log(f"  Mode: minterpolate (oversample+blend)  {input_fps:.2f} fps → {output_fps:.0f} fps")
+
     log(f"  Expected output: ~{total_output_frames} frames @ {output_fps:.0f} fps")
 
-    # ── RIFE binary ───────────────────────────────────────────────────────
-    rife_bin, rife_dir = find_rife()
-    if not rife_bin:
-        raise RuntimeError(
-            "rife-ncnn-vulkan not found. Run: python vendor_ffmpeg.py"
-        )
-    model_name = pick_model(rife_dir)
-    model_path = str(Path(rife_dir) / model_name)
-    uhd = (quality == QUALITY_HIGH)
-    log(f"  RIFE binary: {rife_bin}")
-    log(f"  Model: {model_name}   UHD: {uhd}")
+    # ── RIFE binary (only needed for RIFE path) ───────────────────────────
+    if use_rife:
+        rife_bin, rife_dir = find_rife()
+        if not rife_bin:
+            raise RuntimeError(
+                "rife-ncnn-vulkan not found. Run: python vendor_ffmpeg.py"
+            )
+        model_name = pick_model(rife_dir)
+        model_path = str(Path(rife_dir) / model_name)
+        uhd = (quality == QUALITY_HIGH)
+        log(f"  RIFE binary: {rife_bin}")
+        log(f"  Model: {model_name}   UHD: {uhd}")
 
     # ── Temp workspace ────────────────────────────────────────────────────
     tmpdir = tempfile.mkdtemp(prefix="flowcap_")
@@ -155,85 +157,103 @@ def process_video(
                 log(f"\n── Segment {seg_idx + 1}/{len(segments)}  "
                     f"({seg_start:.2f}s → {seg_end:.2f}s) ──")
 
-            seg_tmpdir = os.path.join(tmpdir, f"seg{seg_idx}")
-            frames_in_dir = os.path.join(seg_tmpdir, "frames_in")
-            os.makedirs(frames_in_dir, exist_ok=True)
+            if multi_segment:
+                seg_video_path = os.path.join(tmpdir, f"seg{seg_idx}.mp4")
+            else:
+                seg_video_path = video_no_audio if has_audio else output_path
 
-            seg_input_frames = max(1, int(round(seg_dur * extract_fps)))
             seg_output_frames = max(1, int(round(seg_dur * output_fps)))
 
-            # ── 3. Extract frames ─────────────────────────────────────────
-            log(f"Extracting frames at {extract_fps:.2f} fps...")
-            n_frames = extract_frames(
-                input_path, frames_in_dir,
-                target_fps=extract_fps,
-                start_time=seg_start if seg_start > 0 else None,
-                end_time=seg_end if seg_end < duration else None,
-                log_callback=log_callback,
-                progress_callback=_make_progress_cb(seg_frac_start, seg_frac_end, 0.0, 0.10),
-                total_frames=seg_input_frames,
-                cancel_check=cancel_check,
-            )
-            if cancelled():
-                return output_path
-            log(f"  Extracted {n_frames} frames.")
-
-            # ── 4. RIFE interpolation passes ──────────────────────────────
-            current_in = frames_in_dir
-            current_fps = extract_fps
-
-            for pass_num in range(passes):
-                pass_out = os.path.join(seg_tmpdir, f"rife_pass{pass_num + 1}")
-                os.makedirs(pass_out, exist_ok=True)
-
-                p_start = 0.10 + (pass_num / passes) * 0.75
-                p_end = 0.10 + ((pass_num + 1) / passes) * 0.75
-
-                n_in = len(list(Path(current_in).glob("*.png")))
-                expected_out = max(1, 2 * n_in - 1)
-
-                log(f"RIFE pass {pass_num + 1}/{passes}  ({n_in} frames → ~{expected_out} frames)...")
-                interpolate_rife(
-                    input_dir=current_in,
-                    output_dir=pass_out,
-                    rife_bin=rife_bin,
-                    model_path=model_path,
-                    uhd=uhd,
+            if not use_rife:
+                # ── minterpolate: oversample → blend → downsample ─────────
+                # Clips a segment by trimming via -ss/-to in interpolate_video.
+                # For single segment just process the whole file directly.
+                log(f"Running minterpolate ({input_fps:.2f} fps → {output_fps:.0f} fps)...")
+                interpolate_video(
+                    input_path=input_path,
+                    output_path=seg_video_path,
+                    input_fps=input_fps,
+                    output_fps=output_fps,
+                    quality=quality,
                     log_callback=log_callback,
-                    progress_callback=_make_progress_cb(
-                        seg_frac_start, seg_frac_end, p_start, p_end
-                    ),
-                    expected_output_frames=expected_out,
+                    progress_callback=lambda cur, tot: _make_progress_cb(
+                        seg_frac_start, seg_frac_end, 0.0, 1.0)(cur, tot),
+                    total_output_frames=seg_output_frames,
+                    cancel_check=cancel_check,
+                )
+            else:
+                # ── RIFE: extract → interpolate passes → encode ───────────
+                seg_tmpdir = os.path.join(tmpdir, f"seg{seg_idx}")
+                frames_in_dir = os.path.join(seg_tmpdir, "frames_in")
+                os.makedirs(frames_in_dir, exist_ok=True)
+
+                seg_input_frames = max(1, int(round(seg_dur * extract_fps)))
+
+                log(f"Extracting frames at {extract_fps:.2f} fps...")
+                n_frames = extract_frames(
+                    input_path, frames_in_dir,
+                    target_fps=extract_fps,
+                    start_time=seg_start if seg_start > 0 else None,
+                    end_time=seg_end if seg_end < duration else None,
+                    log_callback=log_callback,
+                    progress_callback=_make_progress_cb(seg_frac_start, seg_frac_end, 0.0, 0.10),
+                    total_frames=seg_input_frames,
                     cancel_check=cancel_check,
                 )
                 if cancelled():
                     return output_path
+                log(f"  Extracted {n_frames} frames.")
 
-                current_in = pass_out
-                current_fps *= 2
-                log(f"  Pass {pass_num + 1} done.")
+                current_in = frames_in_dir
+                current_fps = extract_fps
 
-            frames_final_dir = current_in
-            actual_frames = len(list(Path(frames_final_dir).glob("*.png")))
-            final_frame_rate = actual_frames / seg_dur if seg_dur > 0 else current_fps
+                for pass_num in range(passes):
+                    pass_out = os.path.join(seg_tmpdir, f"rife_pass{pass_num + 1}")
+                    os.makedirs(pass_out, exist_ok=True)
 
-            # ── 5. Encode segment ─────────────────────────────────────────
-            if multi_segment:
-                seg_video_path = os.path.join(seg_tmpdir, "segment.mp4")
-            else:
-                seg_video_path = video_no_audio if has_audio else output_path
+                    p_start = 0.10 + (pass_num / passes) * 0.75
+                    p_end = 0.10 + ((pass_num + 1) / passes) * 0.75
 
-            log(f"Encoding {int(output_fps)} fps video...")
-            encode_frames(
-                frames_dir=frames_final_dir,
-                output_path=seg_video_path,
-                frame_rate=final_frame_rate,
-                output_fps=output_fps,
-                log_callback=log_callback,
-                progress_callback=_make_progress_cb(seg_frac_start, seg_frac_end, 0.85, 1.0),
-                total_frames=seg_output_frames,
-                cancel_check=cancel_check,
-            )
+                    n_in = len(list(Path(current_in).glob("*.png")))
+                    expected_out = max(1, 2 * n_in - 1)
+
+                    log(f"RIFE pass {pass_num + 1}/{passes}  ({n_in} → ~{expected_out} frames)...")
+                    interpolate_rife(
+                        input_dir=current_in,
+                        output_dir=pass_out,
+                        rife_bin=rife_bin,
+                        model_path=model_path,
+                        uhd=uhd,
+                        log_callback=log_callback,
+                        progress_callback=_make_progress_cb(
+                            seg_frac_start, seg_frac_end, p_start, p_end
+                        ),
+                        expected_output_frames=expected_out,
+                        cancel_check=cancel_check,
+                    )
+                    if cancelled():
+                        return output_path
+
+                    current_in = pass_out
+                    current_fps *= 2
+                    log(f"  Pass {pass_num + 1} done.")
+
+                frames_final_dir = current_in
+                actual_frames = len(list(Path(frames_final_dir).glob("*.png")))
+                final_frame_rate = actual_frames / seg_dur if seg_dur > 0 else current_fps
+
+                log(f"Encoding {int(output_fps)} fps video...")
+                encode_frames(
+                    frames_dir=frames_final_dir,
+                    output_path=seg_video_path,
+                    frame_rate=final_frame_rate,
+                    output_fps=output_fps,
+                    log_callback=log_callback,
+                    progress_callback=_make_progress_cb(seg_frac_start, seg_frac_end, 0.85, 1.0),
+                    total_frames=seg_output_frames,
+                    cancel_check=cancel_check,
+                )
+
             if cancelled():
                 return output_path
 
