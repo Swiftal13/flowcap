@@ -460,23 +460,14 @@ def encode_frames(
                 cf.write(f"file '{str(p)}'\n"
                          f"duration {1.0 / frame_rate}\n")
 
-        # When RIFE has multiplied frames well above output_fps, blend multiple
-        # intermediate frames into each output frame (temporal average) instead of
-        # just picking every Nth frame.
-        blend_factor = max(1, round(frame_rate / output_fps))
-        if blend_factor >= 2:
-            weights = " ".join(["1"] * blend_factor)
-            vf = (
-                f"tmix=frames={blend_factor}:weights='{weights}',"
-                f"fps={int(output_fps)}"
-            )
-        else:
-            vf = f"fps={int(output_fps)}"
+        # RIFE has already synthesised motion-compensated frames at high rate.
+        # Just pick the closest frame to each output timestamp — no blending needed.
+        vf = f"fps={int(output_fps)}"
 
         if log_callback:
             log_callback(
                 f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
-                f"(blend_factor={blend_factor}, frames={len(pngs)})"
+                f"(frames={len(pngs)})"
             )
 
         cmd = [
