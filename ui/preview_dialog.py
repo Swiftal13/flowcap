@@ -27,28 +27,29 @@ class StatsBadge(QWidget):
             "background-color: #111; border: 1px solid #1e1e1e; border-radius: 6px;"
         )
 
+        self.setFixedHeight(30)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(16)
 
-        self._labels: dict[str, QLabel] = {}
-        for key in ("fps", "res", "flow"):
-            lbl = QLabel("—")
+        self._fps_lbl = QLabel("—")
+        self._res_lbl = QLabel("—")
+        self._flow_lbl = QLabel("—")
+        for lbl in (self._fps_lbl, self._res_lbl, self._flow_lbl):
             lbl.setStyleSheet("color: #555; font-size: 11px; background: transparent; border: none;")
             layout.addWidget(lbl)
-            self._labels[key] = lbl
         layout.addStretch()
 
     def set_stats(self, fps: float, width: int, height: int, flow: bool):
-        self._labels["fps"].setText(f"{fps:.3f} fps")
-        self._labels["res"].setText(f"{width}×{height}")
-        flow_html = (
-            '<span style="color:#34d399;">✦ optical flow</span>'
-            if flow else
-            '<span style="color:#444;">no optical flow</span>'
-        )
-        self._labels["flow"].setText(flow_html)
-        self._labels["flow"].setTextFormat(Qt.TextFormat.RichText)
+        self._fps_lbl.setText(f"{fps:.3f} fps")
+        self._res_lbl.setText(f"{width}×{height}")
+        if flow:
+            self._flow_lbl.setText("✦ optical flow")
+            self._flow_lbl.setStyleSheet("color: #34d399; font-size: 11px; background: transparent; border: none;")
+        else:
+            self._flow_lbl.setText("no optical flow")
+            self._flow_lbl.setStyleSheet("color: #444; font-size: 11px; background: transparent; border: none;")
 
 
 class VideoPane(QWidget):

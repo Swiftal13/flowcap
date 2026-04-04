@@ -447,33 +447,37 @@ def encode_frames(
     if not pngs:
         raise RuntimeError(f"No PNG frames found in {frames_dir}")
 
-    if log_callback and len(pngs) != max(int(pngs[-1].stem) - int(pngs[0].stem) + 1, len(pngs)):
-        log_callback(f"  Warning: {max(int(pngs[-1].stem) - int(pngs[0].stem) + 1, 0) - len(pngs)} frames missing from RIFE output — encoding available frames.")
-
-    # Build a concat list from only the frames that actually exist.
-    # This avoids FFmpeg crashing on gaps caused by RIFE encode failures.
-    import tempfile as _tmp
-    concat_file = _tmp.mktemp(suffix=".txt")
-    try:
-        with open(concat_file, "w") as cf:
-            for p in pngs:
-                cf.write(f"file '{str(p)}'\n"
-                         f"duration {1.0 / frame_rate}\n")
-
-        # RIFE has already synthesised motion-compensated frames at high rate.
-        # Just pick the closest frame to each output timestamp — no blending needed.
-        vf = f"fps={int(output_fps)}"
-
+    # If RIFE dropped frames there will be gaps in the numbering.
+    # Renumber sequentially from 0 so the -i %08d.png pattern works cleanly.
+    expected = int(pngs[-1].stem) - int(pngs[0].stem) + 1
+    if len(pngs) != expected:
         if log_callback:
-            log_callback(
-                f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
-                f"(frames={len(pngs)})"
-            )
+            log_callback(f"  Warning: {expected - len(pngs)} frames missing — renumbering sequentially.")
+        for i, p in enumerate(pngs):
+            dest = p.parent / f"{i:08d}.png"
+            if p != dest:
+                p.rename(dest)
+        pngs = sorted(Path(frames_dir).glob("*.png"), key=lambda f: int(f.stem))
 
+    start_number = int(pngs[0].stem)
+    pattern = os.path.join(frames_dir, "%08d.png")
+
+    vf = f"fps={int(output_fps)}"
+
+    if log_callback:
+        log_callback(
+            f"  Encode: {frame_rate:.1f}fps → {int(output_fps)}fps  "
+            f"(frames={len(pngs)})"
+        )
+
+    import tempfile as _tmp
+    concat_file = None
+    try:
         cmd = [
             ffmpeg, "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_file,
+            "-framerate", str(frame_rate),
+            "-start_number", str(start_number),
+            "-i", pattern,
             "-vf", vf,
             "-c:v", "libx264",
             "-crf", "18",
@@ -523,5 +527,4 @@ def encode_frames(
         if proc.returncode not in (0, None):
             raise RuntimeError(f"FFmpeg encoding failed (exit {proc.returncode})")
     finally:
-        if os.path.exists(concat_file):
-            os.remove(concat_file)
+        pass
