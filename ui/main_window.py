@@ -260,7 +260,7 @@ class DropZone(QWidget):
         )
 
     def set_success(self):
-        self.setStyleSheet("#dropZone { border-color: #34d399; }")
+        pass  # no extra colour change — done label is sufficient signal
 
     # ── Events ───────────────────────────────────────────────────────────
 
