@@ -87,7 +87,7 @@ QPushButton:disabled {
 
 /* ── Convert / primary action button ───────────────────────────────── */
 #convertBtn {
-    background-color: #111;
+    background-color: #222222;
     color: #fff;
     border: 1px solid #34d399;
     border-radius: 8px;
@@ -98,26 +98,26 @@ QPushButton:disabled {
 }
 
 #convertBtn:hover {
-    background-color: #0d2a20;
+    background-color: #2c2c2c;
     border-color: #4eeaac;
 }
 
 #convertBtn:pressed {
-    background-color: #0a1f17;
+    background-color: #1a1a1a;
     border-color: #34d399;
 }
 
 #convertBtn:disabled {
-    background-color: #111;
-    color: #fff;
-    border: 1px solid #f87171;
+    background-color: #222222;
+    color: #aaa;
+    border: 1px solid #333;
 }
 
 /* ── Cancel button ──────────────────────────────────────────────────── */
 #cancelBtn {
-    background-color: #2a1a1a;
-    color: #f87171;
-    border: 1px solid #4a2020;
+    background-color: #222222;
+    color: #fff;
+    border: 1px solid #f87171;
     border-radius: 8px;
     padding: 11px 20px;
     font-size: 13px;
@@ -126,13 +126,12 @@ QPushButton:disabled {
 }
 
 #cancelBtn:hover {
-    background-color: #351f1f;
-    border-color: #6a2e2e;
-    color: #fca5a5;
+    background-color: #2c2c2c;
+    border-color: #fca5a5;
 }
 
 #cancelBtn:pressed {
-    background-color: #1f1212;
+    background-color: #1a1a1a;
 }
 
 /* ── Open folder button ─────────────────────────────────────────────── */
