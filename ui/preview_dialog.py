@@ -11,7 +11,6 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
     QDialog, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSlider, QWidget,
-    QFrame,
 )
 
 from core.ffmpeg_utils import probe_video
@@ -84,8 +83,7 @@ class VideoPane(QWidget):
         layout.addLayout(caption_row)
 
         self.video_widget = QVideoWidget()
-        self.video_widget.setMinimumSize(340, 210)
-        self.video_widget.setStyleSheet("background: #000; border-radius: 6px;")
+        self.video_widget.setFixedSize(350, 197)  # 16:9
         layout.addWidget(self.video_widget)
 
         self.stats = StatsBadge()
@@ -131,7 +129,7 @@ class PreviewDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Preview")
         self.setModal(True)
-        self.setFixedSize(780, 440)
+        self.setFixedSize(760, 420)
         self._input_path = input_path
         self._output_path = output_path
         self._playing = False

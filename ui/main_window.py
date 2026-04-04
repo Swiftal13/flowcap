@@ -3,6 +3,7 @@ FlowCap main window — PyQt6 UI.
 """
 
 import os
+import subprocess
 import sys
 import time
 import tempfile
@@ -11,11 +12,11 @@ from pathlib import Path
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QObject, QUrl, QTimer,
 )
-from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QCursor
+from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QProgressBar, QTextEdit, QFileDialog,
-    QComboBox, QSizePolicy, QCheckBox, QListWidget, QListWidgetItem,
+    QComboBox, QSizePolicy, QCheckBox, QListWidget,
     QMessageBox, QApplication,
 )
 
@@ -780,14 +781,15 @@ class MainWindow(QMainWindow):
     # ── Output actions ────────────────────────────────────────────────────
 
     def _open_output_folder(self):
-        if self._output_path:
-            folder = str(Path(self._output_path).parent)
-            if sys.platform == "darwin":
-                os.system(f'open "{folder}"')
-            elif sys.platform == "win32":
-                os.startfile(folder)
-            else:
-                os.system(f'xdg-open "{folder}"')
+        if not self._output_path:
+            return
+        folder = str(Path(self._output_path).parent)
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", folder])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
 
     def _show_preview(self):
         if not self._input_path or not self._output_path:
