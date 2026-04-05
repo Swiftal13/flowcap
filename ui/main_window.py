@@ -310,6 +310,7 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._converting: bool = False
         self._post_convert: bool = False
+        self._cancelling: bool = False
         self._queue: list[str] = []
         self._convert_start_time: float = 0.0
 
@@ -671,8 +672,14 @@ class MainWindow(QMainWindow):
         if self._worker:
             self._worker.cancel()
         self._converting = False
-        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps")
-        self._status_label.setText("Cancelled")
+        self._cancelling = True
+        self._queue.clear()
+        self._update_queue_display()
+        self._convert_btn.setObjectName("cancelBtn")
+        self._convert_btn.setStyle(self._convert_btn.style())
+        self._convert_btn.setText("Cancelling…")
+        self._convert_btn.setEnabled(False)
+        self._status_label.setText("Cancelling…")
 
     def _reset(self):
         self._input_path = None
@@ -698,6 +705,7 @@ class MainWindow(QMainWindow):
 
         self._converting = True
         self._post_convert = False
+        self._cancelling = False
         self._convert_btn.setText("Cancel")
         self._convert_btn.setObjectName("cancelBtn")
         self._convert_btn.setStyle(self._convert_btn.style())
@@ -777,9 +785,23 @@ class MainWindow(QMainWindow):
         """Called once the conversion thread has fully exited. Safe to start next."""
         if self._queue and self._post_convert:
             QTimer.singleShot(300, self._start_next_in_queue)
+        elif self._cancelling:
+            self._cancelling = False
+            self._progress_bar.setMaximum(1)
+            self._progress_bar.setValue(0)
+            self._set_convert_btn(
+                f"Convert to {int(self._selected_fps())}fps",
+                enabled=self._input_path is not None,
+            )
+            self._status_label.setText("Cancelled")
 
     def _on_error(self, msg: str):
         self._converting = False
+        self._queue.clear()
+        self._update_queue_display()
+        self._progress_bar.setMaximum(1)
+        self._progress_bar.setValue(0)
+        self._status_label.setText("Failed")
         self._log_message(f"ERROR: {msg}")
         self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps")
         QMessageBox.critical(self, "Conversion Error", msg)
