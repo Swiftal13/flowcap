@@ -705,8 +705,9 @@ class MainWindow(QMainWindow):
         self._done_label.hide()
         self._preview_btn.hide()
         self._open_folder_btn.hide()
+        self._progress_bar.setMaximum(0)   # indeterminate / pulsing
         self._progress_bar.setValue(0)
-        self._status_label.setText("Converting…")
+        self._status_label.setText("Starting…")
         self._log.clear()
         self._log_message("Starting conversion...")
         self._convert_start_time = time.time()
@@ -733,7 +734,9 @@ class MainWindow(QMainWindow):
         self._thread.start()
 
     def _on_progress(self, current: int, total: int):
-        self._progress_bar.setMaximum(total)
+        # Switch from indeterminate to determinate on first real frame
+        if self._progress_bar.maximum() == 0:
+            self._progress_bar.setMaximum(total)
         self._progress_bar.setValue(current)
         pct = int(100 * current / total) if total else 0
 
