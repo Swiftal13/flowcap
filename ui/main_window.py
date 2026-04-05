@@ -312,6 +312,7 @@ class MainWindow(QMainWindow):
         self._post_convert: bool = False
         self._cancelling: bool = False
         self._queue: list[str] = []
+        self._failed_files: list[str] = []
         self._convert_start_time: float = 0.0
 
         self._load_stylesheet()
@@ -555,6 +556,8 @@ class MainWindow(QMainWindow):
     def _on_files_dropped(self, paths: list[str]):
         if not paths:
             return
+        if not self._converting:
+            self._failed_files.clear()
         if self._converting:
             # Add all to queue
             for p in paths:
@@ -804,9 +807,7 @@ class MainWindow(QMainWindow):
 
     def _on_thread_done(self):
         """Called once the conversion thread has fully exited. Safe to start next."""
-        if self._queue and self._post_convert:
-            QTimer.singleShot(300, self._start_next_in_queue)
-        elif self._cancelling:
+        if self._cancelling:
             self._cancelling = False
             self._progress_bar.setMaximum(1)
             self._progress_bar.setValue(0)
@@ -815,17 +816,37 @@ class MainWindow(QMainWindow):
                 enabled=self._input_path is not None,
             )
             self._status_label.setText("Cancelled")
+        elif self._queue:
+            # Advance regardless of whether last file succeeded or errored
+            QTimer.singleShot(300, self._start_next_in_queue)
 
     def _on_error(self, msg: str):
         self._converting = False
-        self._queue.clear()
-        self._update_queue_display()
         self._progress_bar.setMaximum(1)
         self._progress_bar.setValue(0)
-        self._status_label.setText("Failed")
-        self._log_message(f"ERROR: {msg}")
-        self._set_convert_btn(f"Convert to {int(self._selected_fps())}fps")
-        QMessageBox.critical(self, "Conversion Error", msg)
+
+        failed_name = Path(self._input_path).name if self._input_path else "file"
+        self._failed_files.append(failed_name)
+        self._log_message(f"ERROR [{failed_name}]: {msg}")
+
+        if self._queue:
+            # Batch continues — skip this file, don't block with a dialog
+            self._status_label.setText(f"Error on {failed_name} — skipping…")
+        else:
+            # Last (or only) file — show summary
+            self._status_label.setText("Failed")
+            self._set_convert_btn(
+                f"Convert to {int(self._selected_fps())}fps",
+                enabled=self._input_path is not None,
+            )
+            if len(self._failed_files) > 1:
+                names = "\n".join(f"  • {f}" for f in self._failed_files)
+                QMessageBox.critical(
+                    self, "Batch Complete With Errors",
+                    f"{len(self._failed_files)} file(s) failed:\n{names}\n\nLast error:\n{msg}",
+                )
+            else:
+                QMessageBox.critical(self, "Conversion Error", msg)
 
     # ── Output actions ────────────────────────────────────────────────────
 
