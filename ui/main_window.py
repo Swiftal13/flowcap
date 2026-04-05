@@ -12,6 +12,7 @@ from pathlib import Path
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QObject, QUrl, QTimer,
 )
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -784,12 +785,7 @@ class MainWindow(QMainWindow):
         if not self._output_path:
             return
         folder = str(Path(self._output_path).parent)
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", folder])
-        elif sys.platform == "win32":
-            subprocess.Popen(["explorer", folder])
-        else:
-            subprocess.Popen(["xdg-open", folder])
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _show_preview(self):
         if not self._input_path or not self._output_path:
