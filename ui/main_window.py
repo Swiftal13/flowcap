@@ -784,6 +784,23 @@ class MainWindow(QMainWindow):
         self._status_label.setText("Done")
         self._set_convert_btn("Convert another")
         self._drop_zone.set_success()
+        QTimer.singleShot(100, lambda: self._validate_output(output_path))
+
+    def _validate_output(self, output_path: str):
+        try:
+            info = probe_video(output_path)
+            actual = info["fps"]
+            target = self._selected_fps()
+            if abs(actual - target) / target > 0.05:
+                self._log_message(
+                    f"  Warning: output is {actual:.2f} fps (target {target:.0f} fps) — "
+                    "try a different quality setting or check the source file."
+                )
+                self._status_label.setText(f"Done  ·  fps off ({actual:.1f} fps)")
+            else:
+                self._log_message(f"  Output: {actual:.3f} fps  {info['width']}×{info['height']}")
+        except Exception:
+            pass
 
     def _on_thread_done(self):
         """Called once the conversion thread has fully exited. Safe to start next."""
