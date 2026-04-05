@@ -419,9 +419,13 @@ class MainWindow(QMainWindow):
         quality_label = QLabel("Quality")
         quality_label.setObjectName("sectionLabel")
         self._quality_combo = QComboBox()
-        self._quality_combo.addItem("Balanced  (2 passes)", QUALITY_BALANCED)
-        self._quality_combo.addItem("High Quality  (3 passes)", QUALITY_HIGH)
-        self._quality_combo.setFixedWidth(170)
+        self._quality_combo.addItem("Standard  ·  faster", QUALITY_BALANCED)
+        self._quality_combo.addItem("High Quality  ·  slower", QUALITY_HIGH)
+        self._quality_combo.setFixedWidth(180)
+        self._quality_combo.setToolTip(
+            "Standard: good for most videos, faster to process\n"
+            "High Quality: wider motion search, best for fast action or complex scenes"
+        )
 
         fps_label = QLabel("FPS")
         fps_label.setObjectName("sectionLabel")
