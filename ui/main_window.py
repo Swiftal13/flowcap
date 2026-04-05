@@ -728,6 +728,7 @@ class MainWindow(QMainWindow):
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.finished.connect(lambda: setattr(self, "_thread", None))
+        self._thread.finished.connect(self._on_thread_done)
 
         self._thread.start()
 
@@ -769,9 +770,10 @@ class MainWindow(QMainWindow):
         self._set_convert_btn("Convert another")
         self._drop_zone.set_success()
 
-        # Auto-process next in queue
-        if self._queue:
-            QTimer.singleShot(800, self._start_next_in_queue)
+    def _on_thread_done(self):
+        """Called once the conversion thread has fully exited. Safe to start next."""
+        if self._queue and self._post_convert:
+            QTimer.singleShot(300, self._start_next_in_queue)
 
     def _on_error(self, msg: str):
         self._converting = False
